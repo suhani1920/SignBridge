@@ -26,10 +26,10 @@ def convert_p1_archive_to_p2(p1_npz: Path, out_dir: Path) -> Path:
     two_hand_seq = np.zeros((t_frames, NUM_HANDS, NUM_LANDMARKS, COORDS), dtype=np.float32)
     mask = np.zeros((t_frames, NUM_HANDS), dtype=bool)
 
-    # Place P1 single-hand sequence into right-hand channel (index 1)
+    # Place P1 single-hand sequence into slot 0 to match RecognitionService.recognize()
     if t_frames > 0:
-        two_hand_seq[:, 1, :, :] = pose_seq
-        mask[:, 1] = np.linalg.norm(pose_seq.reshape(t_frames, -1), axis=1) > 1e-8
+        two_hand_seq[:, 0, :, :] = pose_seq
+        mask[:, 0] = np.linalg.norm(pose_seq.reshape(t_frames, -1), axis=1) > 1e-8
 
     resampled_seq = resample(two_hand_seq, target_len=SEQ_LEN)
     resampled_mask = resample_mask(mask, target_len=SEQ_LEN)
