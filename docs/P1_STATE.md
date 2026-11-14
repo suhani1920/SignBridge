@@ -17,7 +17,7 @@
   - `isl/metadata.py`: Reads/upserts `metadata.csv` atomically with columns: `sample_id`, `gloss`, `meaning`, `video_path`, `npz_path`, `num_frames`.
   - `isl/pipeline.py`: Batch processor scanning input videos, running extraction and normalization, outputting `.npz` files and updating metadata.
   - `tests/test_features.py`: Unit tests covering schema, normalization math, metadata upsert, and output shapes using synthetic data.
-- **Verification Status:** Synthetic tests verified passing (31 passed). Single real-video extraction verified on 1 clip (Section 9.7). Full batch run deferred.
+- **Verification Status:** Full test suite verified passing (44 passed, Section 9.11). Full Hello batch extraction and P1-to-P2 bridge verification completed across all 36 clips (Section 9.13).
 
 ---
 
@@ -370,3 +370,34 @@ Either pin `mediapipe` to a compatible 0.10.x in `docs/requirements.txt` (P1-own
   .venv312/bin/python -m pytest -q
   ```
 - **Actual result:** `44 passed, 2 warnings in 14.47s`.
+
+### 9.12 Real-Data Smoke Test & P2 Bridge Verification (2026-11-15)
+
+- **Video Extraction:**
+  - Processed two additional clips across both source formats:
+    - `hello__INCLUDE__00566__MVI_0029.mp4`: 76 detected hand frames.
+    - `hello__ISL500__00114__Hello__session159__clip015.mp4`: 38 detected hand frames.
+  - Combined with the previously extracted clip (43 frames), total extracted samples in `isl/extracted/hello/` is 3.
+- **P2 Export Bridge:**
+  - Ran `isl.export_p2` (`--src isl/extracted --dst data/pose_db`); successfully converted and exported 3 archives into `data/pose_db/` with single-hand data in slot 0 and `align_y=True`.
+- **Evaluator Outcome:**
+  - Ran `backend.scripts.evaluate` (`--data-dir data/pose_db`); loaded all 3 samples and reported 100.00% Top-1 / Top-3 accuracy on the single `hello` class.
+- **Important Distinction:**
+  - This smoke test verifies **pipeline and bridge compatibility only** (codec handling, MediaPipe extraction, normalization, `.npz` format conversion, database indexing, and evaluator execution).
+  - It does **not** demonstrate meaningful multi-class recognition accuracy, discrimination, or generalization, as all evaluated samples share the same class (`hello`).
+
+### 9.13 Full Hello Batch Extraction & P1-to-P2 Pipeline Smoke Test (2026-11-15)
+
+- **Batch Video Extraction:**
+  - Full batch run completed on all 36 raw video clips under `isl/raw_videos/hello/`:
+    - Processed: 33 videos.
+    - Skipped: 3 previously extracted, up-to-date clips.
+    - Errors/Failures: 0.
+  - Generated outputs: 36 archives in `isl/extracted/hello/*.npz` and 36 indexed rows in `isl/metadata.csv`.
+- **P2 Export Bridge:**
+  - Ran `isl.export_p2` (`--src isl/extracted --dst data/pose_db`); successfully converted and exported all 36 archives into `data/pose_db/` with single-hand data in slot 0 and `align_y=True`.
+- **Evaluator Outcome (LOOCV):**
+  - Ran `backend.scripts.evaluate` (`--data-dir data/pose_db`); loaded 36 samples and reported 100.00% Top-1 / Top-3 accuracy on the single `hello` class.
+- **Important Caveat:**
+  - The 100% metric validates end-to-end **batch processing mechanics, bridge translation, and evaluation stability** at dataset scale.
+  - It does **not** measure multi-class recognition accuracy or class separability, as no negative/distractor classes exist in the dataset yet.
