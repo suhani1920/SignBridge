@@ -353,3 +353,20 @@ Either pin `mediapipe` to a compatible 0.10.x in `docs/requirements.txt` (P1-own
   .venv312/bin/python -m pytest tests/test_features.py -k TestMetadata -v
   ```
 - **Actual result:** `7 passed, 26 deselected, 2 warnings in 13.42s`.
+
+### 9.11 Merge Conflict Resolution with `origin/main` (2026-11-15)
+
+- **Team Decision Confirmed:** MVP supports one hand (`max_num_hands=1` in P1), with `isl/export_p2.py` serving as the P1-to-P2 adapter into hand slot `0` of P2's `(32, 2, 21, 3)` format.
+- **Files changed (resolved conflicts + state log):**
+  - `.gitignore`: Combined P1 ignore rules with `*.npz` and `data/pose_db/` so both P1 (`isl/extracted/**/*.npz`, `isl/metadata.csv`) and P2 (`data/pose_db/`) generated data remain ignored.
+  - `docs/CONTRACT.md`: Unified P1 one-hand extraction contract and P2 recognition engine contract, documenting the `isl/export_p2.py` one-hand bridge (`pose_seq` into slot `0`, `mask[:, 1] = False`, `align_y = True`).
+  - `docs/requirements.txt`: Combined P1 and P2 dependencies (`mediapipe==0.10.21`, `opencv-python>=4.9.0`, `numpy>=1.26.0`, `pyyaml>=6.0`, `pytest>=8.0.0`).
+  - `isl/__init__.py`: Preserved P2 public API exports (`RecognitionService`, `PoseDatabase`, `SignRecognizer`, `SteadyDetector`, `match_pose`, etc.) alongside the package docstring.
+  - `isl/schema.py`: Combined P2 recognition types/constants and P1 pipeline types/constants with full `PoseFrame` and `SignSample` docstrings (and lazy `yaml` import in `RecognizerConfig.from_file`).
+  - `tests/test_features.py`: Preserved all P1 unit tests (`TestSchema`, `TestNormalize`, `TestMetadata`, `TestPipelineHelpers`, `TestNpzOutputShape`) and P2 `isl.features` unit tests (`normalize_hand`, `resample`, `summary_vector`).
+  - `docs/P1_STATE.md`: Recorded the resolved files and full test suite outcome.
+- **Test command:**
+  ```bash
+  .venv312/bin/python -m pytest -q
+  ```
+- **Actual result:** `44 passed, 2 warnings in 14.47s`.

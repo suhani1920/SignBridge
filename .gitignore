@@ -23,8 +23,10 @@ build/
 *.mkv
 
 # --- Generated pose / feature data (never commit) ---
+*.npz
 isl/extracted/**/*.npz
 isl/metadata.csv
+data/pose_db/
 
 # --- ChromaDB database (not yet implemented; exclude when created) ---
 isl/db/

@@ -1,5 +1,5 @@
 """
-tests/test_features.py — P1 focused tests for SignBridge.
+tests/test_features.py — P1 and P2 feature & pipeline unit tests for SignBridge.
 
 All tests use synthetic (fake) data: numpy arrays, temporary files, and
 short in-memory videos built with OpenCV. No real sign-language videos
@@ -9,11 +9,12 @@ Run the tests from the repo root:
     pytest tests/test_features.py -v
 
 What each test verifies:
-  TestSchema            — PoseFrame and SignSample data types
-  TestNormalize         — normalization math and helpers
-  TestMetadata          — CSV read / upsert / deduplication
-  TestPipelineHelpers   — misplaced-video detection
-  TestNpzOutputShape    — final .npz array dimensions
+  TestSchema            — PoseFrame and SignSample data types (P1)
+  TestNormalize         — normalization math and helpers (P1)
+  TestMetadata          — CSV read / upsert / deduplication (P1)
+  TestPipelineHelpers   — misplaced-video detection & single-video mode (P1)
+  TestNpzOutputShape    — final .npz array dimensions (P1)
+  test_* (isl.features) — normalize_hand, resample, summary_vector (P2)
 """
 
 from __future__ import annotations
@@ -26,16 +27,21 @@ import numpy as np
 import pytest
 
 from isl.schema import (
-    NUM_LANDMARKS,
-    NUM_COORDS,
-    RESAMPLE_FRAMES,
-    VEC_LEN,
+    COORDS,
     FLAT_VEC_LEN,
     MIN_HAND_FRAMES,
+    NUM_COORDS,
+    NUM_HANDS,
+    NUM_LANDMARKS,
+    RESAMPLE_FRAMES,
+    SEQ_LEN,
+    SUMMARY_DIM,
+    VEC_LEN,
     VIDEO_EXTENSIONS,
     PoseFrame,
     SignSample,
 )
+from isl.features import normalize_hand, resample, summary_vector
 from isl.normalize import normalize_sequence, build_vec, build_flat_vec, _normalize_frame
 from isl.metadata import load_metadata, upsert_row, COLUMNS
 from isl.extract import check_video_placement, SkipVideo
@@ -458,3 +464,43 @@ class TestNpzOutputShape:
         assert not np.any(np.isnan(norm))
         assert not np.any(np.isnan(vec))
         assert not np.any(np.isnan(flat_vec))
+
+
+# ---------------------------------------------------------------------------
+# P2 Feature Tests (isl.features)
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_hand_wrist_origin_and_unit_scale() -> None:
+    rng = np.random.default_rng(42)
+    hand = rng.normal(loc=5.0, scale=2.0, size=(NUM_LANDMARKS, COORDS)).astype(np.float32)
+    hand[0] = np.array([10.0, 20.0, 30.0], dtype=np.float32)  # wrist
+    hand[12] = np.array([13.0, 24.0, 30.0], dtype=np.float32)  # distance = 5.0
+
+    normed = normalize_hand(hand)
+    assert normed.shape == (NUM_LANDMARKS, COORDS)
+    assert np.allclose(normed[0], 0.0, atol=1e-6)
+    assert np.isclose(np.linalg.norm(normed[12]), 1.0, atol=1e-6)
+
+
+def test_normalize_hand_zero_guard() -> None:
+    zeros = np.zeros((NUM_LANDMARKS, COORDS), dtype=np.float32)
+    out = normalize_hand(zeros)
+    assert np.all(out == 0.0)
+    assert np.isfinite(out).all()
+
+
+def test_resample_fixed_length() -> None:
+    seq = np.linspace(0.0, 10.0, num=20 * 2 * 21 * 3, dtype=np.float32).reshape(20, 2, 21, 3)
+    out = resample(seq, target_len=SEQ_LEN)
+    assert out.shape == (SEQ_LEN, NUM_HANDS, NUM_LANDMARKS, COORDS)
+    assert np.allclose(out[0], seq[0])
+    assert np.allclose(out[-1], seq[-1])
+
+
+def test_summary_vector_shape_and_masking() -> None:
+    seq = np.ones((SEQ_LEN, NUM_HANDS, NUM_LANDMARKS, COORDS), dtype=np.float32)
+    mask = np.zeros((SEQ_LEN, NUM_HANDS), dtype=bool)
+    vec = summary_vector(seq, mask)
+    assert vec.shape == (SUMMARY_DIM,)
+    assert np.all(vec == 0.0)
