@@ -79,6 +79,7 @@ class RecognizerConfig:
     ema_alpha: float = 0.4
     ring_buffer_size: int = 64
     cooldown_seconds: float = 1.5
+    align_y: bool | None = None
 
     @classmethod
     def from_file(cls, path: str | Path) -> RecognizerConfig:

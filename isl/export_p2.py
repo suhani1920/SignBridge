@@ -45,6 +45,7 @@ def convert_p1_archive_to_p2(p1_npz: Path, out_dir: Path) -> Path:
         mask=resampled_mask.astype(bool),
         summary=summary.astype(np.float32),
         label=np.array(label),
+        align_y=np.array(True),
     )
     return out_path
 

@@ -45,6 +45,7 @@ class PoseDatabase:
         self.labels: list[str] = []
         self.file_paths: list[Path] = []
         self._sequence_cache: dict[int, tuple[NDArray[np.float32], NDArray[np.bool_]]] = {}
+        self.align_y: bool = False
         self._load()
 
     def __len__(self) -> int:
@@ -99,6 +100,8 @@ class PoseDatabase:
                 raw_summaries.append(vec)
                 labels.append(str(data["label"].item()))
                 valid_paths.append(path)
+                if "align_y" in data and bool(data["align_y"].item()):
+                    self.align_y = True
 
         if not raw_summaries:
             return
@@ -523,7 +526,8 @@ class SignRecognizer:
                     continue
                 if np.allclose(raw[h], 0.0, atol=_EPS):
                     continue
-                norm_frame[h] = normalize_hand(raw[h],align_y=True)
+                use_align_y = self.config.align_y if self.config.align_y is not None else self.db.align_y
+                norm_frame[h] = normalize_hand(raw[h], align_y=use_align_y)
                 inferred_mask[h] = True
             frame_mask = np.asarray(mask, dtype=bool) if mask is not None else inferred_mask
 

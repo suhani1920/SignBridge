@@ -50,9 +50,10 @@ class RecognitionService:
         if not mask.any():
             return response
 
+        use_align_y = self.config.align_y if self.config.align_y is not None else self.db.align_y
         normalized = np.zeros_like(sequence)
         for frame, hand in zip(*np.nonzero(mask)):
-            normalized[frame, hand] = normalize_hand(sequence[frame, hand],)
+            normalized[frame, hand] = normalize_hand(sequence[frame, hand], align_y=use_align_y)
         query = resample(normalized)
         query_mask = resample_mask(mask)
         match = match_pose(summary_vector(query, query_mask), self.db, config=self.config)
