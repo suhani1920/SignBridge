@@ -1,4 +1,4 @@
-"""Data contract constants and structured dataclasses for the ISL recognition engine."""
+"""Shared data contract constants and structured dataclasses for SignBridge (P1 + P2)."""
 
 from __future__ import annotations
 
@@ -6,9 +6,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 import json
+import numpy as np
 import yaml
 
-# --- FIXED DATA CONTRACT CONSTANTS ---
+# ===========================================================================
+# 1. P2 Recognition Engine Contract Constants & Types
+# ===========================================================================
+
 SEQ_LEN: int = 32
 NUM_LANDMARKS: int = 21
 COORDS: int = 3
@@ -90,3 +94,61 @@ class RecognizerConfig:
         valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
         filtered = {k: v for k, v in data.items() if k in valid_fields}
         return cls(**filtered)
+
+
+# ===========================================================================
+# 2. P1 Video-to-Pose Pipeline Contract Constants & Types
+# ===========================================================================
+
+NUM_COORDS: int = 3
+RESAMPLE_FRAMES: int = 30
+MIN_HAND_FRAMES: int = 5
+VIDEO_EXTENSIONS: tuple[str, ...] = (".mp4", ".mov", ".avi", ".webm")
+VEC_LEN: int = NUM_LANDMARKS * NUM_COORDS * 4           # 252
+FLAT_VEC_LEN: int = RESAMPLE_FRAMES * NUM_LANDMARKS * NUM_COORDS  # 1890
+
+
+@dataclass
+class PoseFrame:
+    """Landmark data for a single video frame (one hand)."""
+
+    frame_idx: int
+    landmarks: np.ndarray          # shape (NUM_LANDMARKS, NUM_COORDS) float32
+    detected: bool = True
+
+    def __post_init__(self) -> None:
+        self.landmarks = np.asarray(self.landmarks, dtype=np.float32)
+        if self.landmarks.shape != (NUM_LANDMARKS, NUM_COORDS):
+            raise ValueError(
+                f"landmarks must be shape ({NUM_LANDMARKS}, {NUM_COORDS}), "
+                f"got {self.landmarks.shape}"
+            )
+
+
+@dataclass
+class SignSample:
+    """All data associated with one sign-language video clip."""
+
+    sample_id: str
+    gloss: str
+    video_path: str
+    source_fps: float
+    frames: list[PoseFrame] = field(default_factory=list)
+
+    @property
+    def total_frames(self) -> int:
+        """Total number of frames in the source video."""
+        return len(self.frames)
+
+    @property
+    def detected_frames(self) -> int:
+        """Number of frames where MediaPipe detected a hand."""
+        return sum(1 for f in self.frames if f.detected)
+
+    @property
+    def pose_seq(self) -> np.ndarray:
+        """Return the full landmark sequence as ``(T, 21, 3)`` float32."""
+        arrays = [f.landmarks for f in self.frames if f.detected]
+        if not arrays:
+            return np.zeros((0, NUM_LANDMARKS, NUM_COORDS), dtype=np.float32)
+        return np.stack(arrays, axis=0)
