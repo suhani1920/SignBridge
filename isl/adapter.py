@@ -52,7 +52,7 @@ class RecognitionService:
 
         normalized = np.zeros_like(sequence)
         for frame, hand in zip(*np.nonzero(mask)):
-            normalized[frame, hand] = normalize_hand(sequence[frame, hand])
+            normalized[frame, hand] = normalize_hand(sequence[frame, hand],)
         query = resample(normalized)
         query_mask = resample_mask(mask)
         match = match_pose(summary_vector(query, query_mask), self.db, config=self.config)

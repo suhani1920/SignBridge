@@ -12,16 +12,11 @@ _WRIST_IDX: int = 0
 _MIDDLE_TIP_IDX: int = 12
 
 
-def normalize_hand(landmarks: NDArray[np.floating]) -> NDArray[np.float32]:
-    """Translate wrist to origin and scale by wrist-to-middle-fingertip distance.
-
-    Args:
-        landmarks: Array of shape (21, 3) representing single hand landmarks.
-
-    Returns:
-        Normalized array of shape (21, 3) as float32. Returns zeros if input is
-        all zeros or scale distance is near zero.
-    """
+def normalize_hand(
+    landmarks: NDArray[np.floating],
+    align_y: bool = False,
+) -> NDArray[np.float32]:
+    """Translate wrist to origin, scale by wrist-to-middle-fingertip distance, and optionally align +Y."""
     pts = np.asarray(landmarks, dtype=np.float32)
     if pts.shape != (NUM_LANDMARKS, COORDS):
         raise ValueError(f"Expected shape ({NUM_LANDMARKS}, {COORDS}), got {pts.shape}")
@@ -35,19 +30,23 @@ def normalize_hand(landmarks: NDArray[np.floating]) -> NDArray[np.float32]:
     if scale < _EPS:
         return np.zeros((NUM_LANDMARKS, COORDS), dtype=np.float32)
 
-    return (centered / scale).astype(np.float32)
+    normed = (centered / scale).astype(np.float32)
+
+    if align_y:
+        tip = normed[_MIDDLE_TIP_IDX]
+        angle = float(np.arctan2(tip[0], tip[1]))
+        cos_a = float(np.cos(-angle))
+        sin_a = float(np.sin(-angle))
+        x = normed[:, 0].copy()
+        y = normed[:, 1].copy()
+        normed[:, 0] = cos_a * x - sin_a * y
+        normed[:, 1] = sin_a * x + cos_a * y
+
+    return normed
 
 
 def resample(sequence: NDArray[np.floating], target_len: int = SEQ_LEN) -> NDArray[np.float32]:
-    """Linearly interpolate a temporal landmark sequence to a fixed length T.
-
-    Args:
-        sequence: Array of shape (T_in, ...) with temporal axis 0.
-        target_len: Desired output length (defaults to SEQ_LEN = 32).
-
-    Returns:
-        Resampled array of shape (target_len, ...) as float32.
-    """
+    """Linearly interpolate a temporal landmark sequence to a fixed length T."""
     seq = np.asarray(sequence, dtype=np.float32)
     if seq.ndim < 2:
         raise ValueError(f"Expected sequence with >=2 dims, got shape {seq.shape}")
@@ -91,15 +90,7 @@ def summary_vector(
     sequence: NDArray[np.floating],
     mask: NDArray[np.bool_] | None = None,
 ) -> NDArray[np.float32]:
-    """Compute fixed-size summary vector [mean, std, min, max, velocity] over sequence.
-
-    Args:
-        sequence: Array of shape (T, 2, 21, 3) of hand-local normalized landmarks.
-        mask: Optional boolean mask of shape (T, 2) indicating detected hands.
-
-    Returns:
-        1D float32 vector of shape (SUMMARY_DIM,).
-    """
+    """Compute fixed-size summary vector [mean, std, min, max, velocity] over sequence."""
     seq = np.asarray(sequence, dtype=np.float32)
     if seq.ndim != 4 or seq.shape[1:] != (NUM_HANDS, NUM_LANDMARKS, COORDS):
         raise ValueError(
@@ -114,12 +105,10 @@ def summary_vector(
         m = np.asarray(mask, dtype=bool)
         if m.shape != (t_steps, NUM_HANDS):
             raise ValueError(f"Expected mask shape {(t_steps, NUM_HANDS)}, got {m.shape}")
-        # Zero out missing hands explicitly per contract
         masked_seq = np.where(m[:, :, None, None], seq, 0.0)
     else:
         masked_seq = seq
 
-    # Shape: (T, 126)
     flat = masked_seq.reshape(t_steps, -1)
 
     mean_feat = np.mean(flat, axis=0)

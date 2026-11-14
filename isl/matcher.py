@@ -523,7 +523,7 @@ class SignRecognizer:
                     continue
                 if np.allclose(raw[h], 0.0, atol=_EPS):
                     continue
-                norm_frame[h] = normalize_hand(raw[h])
+                norm_frame[h] = normalize_hand(raw[h],align_y=True)
                 inferred_mask[h] = True
             frame_mask = np.asarray(mask, dtype=bool) if mask is not None else inferred_mask
 
