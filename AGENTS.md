@@ -183,9 +183,9 @@ data/processed/keypoints/  →  isl/build_features.py  →  data/processed/featu
 ```bash
 # 1. Create and activate a Python virtual environment
 #    This keeps project dependencies isolated from your system Python.
-python -m venv .venv
-source .venv/bin/activate        # macOS / Linux
-# .venv\Scripts\activate         # Windows
+python3.12 -m venv .venv312
+source .venv312/bin/activate        # macOS / Linux
+# .venv312\Scripts\activate         # Windows
 
 # 2. Install Python dependencies
 #    Installs everything listed in docs/requirements.txt.

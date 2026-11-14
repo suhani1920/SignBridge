@@ -39,6 +39,7 @@ from isl.schema import (
 from isl.normalize import normalize_sequence, build_vec, build_flat_vec, _normalize_frame
 from isl.metadata import load_metadata, upsert_row, COLUMNS
 from isl.extract import check_video_placement, SkipVideo
+from isl import pipeline
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +278,40 @@ class TestMetadata:
             header = next(csv.reader(fh))
         assert header == COLUMNS
 
+    def test_upsert_preserves_existing_nonblank_meaning(self, tmp_csv):
+        """Rerunning upsert with blank meaning preserves existing nonblank meaning."""
+        upsert_row({
+            "sample_id": "hello_001", "gloss": "hello", "meaning": "Hello",
+            "video_path": "v.mp4", "npz_path": "h.npz", "num_frames": 10,
+        }, tmp_csv)
+        upsert_row({
+            "sample_id": "hello_001", "gloss": "hello", "meaning": "",
+            "video_path": "v.mp4", "npz_path": "h.npz", "num_frames": 25,
+        }, tmp_csv)
+        rows = load_metadata(tmp_csv)
+        assert len(rows) == 1
+        assert rows[0]["meaning"] == "Hello"
+        assert rows[0]["num_frames"] == "25"
+
+    def test_upsert_same_sample_id_different_glosses_kept_separate(self, tmp_csv):
+        """Same sample_id under different glosses creates separate rows."""
+        upsert_row({
+            "sample_id": "001", "gloss": "hello", "meaning": "",
+            "video_path": "isl/raw_videos/hello/001.mp4",
+            "npz_path": "isl/extracted/hello/001.npz", "num_frames": 10,
+        }, tmp_csv)
+        upsert_row({
+            "sample_id": "001", "gloss": "thankyou", "meaning": "",
+            "video_path": "isl/raw_videos/thankyou/001.mp4",
+            "npz_path": "isl/extracted/thankyou/001.npz", "num_frames": 15,
+        }, tmp_csv)
+        rows = load_metadata(tmp_csv)
+        assert len(rows) == 2
+        assert [(r["gloss"], r["sample_id"]) for r in rows] == [
+            ("hello", "001"),
+            ("thankyou", "001"),
+        ]
+
 
 # ---------------------------------------------------------------------------
 # TestPipelineHelpers
@@ -306,6 +341,70 @@ class TestPipelineHelpers:
         (tmp_path / "README.md").write_text("placeholder")
         result = check_video_placement(tmp_path)
         assert result == []
+
+    def test_single_video_option_and_validation(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """run(video_path=...) processes only the selected video and validates its path."""
+        raw_root = tmp_path / "raw_videos"
+        out_root = tmp_path / "extracted"
+        hello_dir = raw_root / "hello"
+        hello_dir.mkdir(parents=True)
+        v1 = hello_dir / "hello_001.mp4"
+        v2 = hello_dir / "hello_002.mp4"
+        v1.write_bytes(b"fake1")
+        v2.write_bytes(b"fake2")
+
+        processed_calls: list[tuple[pathlib.Path, str, pathlib.Path]] = []
+        upserted_rows: list[dict] = []
+
+        def fake_process_video(
+            vp: pathlib.Path, gloss: str, out: pathlib.Path = pipeline.OUT_ROOT
+        ) -> dict:
+            processed_calls.append((vp, gloss, out))
+            return {
+                "sample_id": vp.stem,
+                "gloss": gloss,
+                "meaning": "",
+                "video_path": str(vp),
+                "npz_path": str(out / gloss / f"{vp.stem}.npz"),
+                "num_frames": 10,
+            }
+
+        monkeypatch.setattr(pipeline, "_process_video", fake_process_video)
+        monkeypatch.setattr(pipeline, "upsert_row", lambda row: upserted_rows.append(row))
+
+        # Single-video mode processes only v1
+        pipeline.run(raw_root=raw_root, out_root=out_root, video_path=v1)
+        assert processed_calls == [(v1, "hello", out_root)]
+        assert len(upserted_rows) == 1
+        assert upserted_rows[0]["sample_id"] == "hello_001"
+
+        # Full-batch mode (video_path omitted) processes both v1 and v2
+        processed_calls.clear()
+        upserted_rows.clear()
+        pipeline.run(raw_root=raw_root, out_root=out_root)
+        assert [c[0] for c in processed_calls] == [v1, v2]
+        assert len(upserted_rows) == 2
+
+        # Validation rejects missing, unsupported, misplaced, or outside files
+        with pytest.raises(FileNotFoundError):
+            pipeline.run(raw_root=raw_root, out_root=out_root, video_path=hello_dir / "missing.mp4")
+
+        bad_ext = hello_dir / "note.txt"
+        bad_ext.write_text("x")
+        with pytest.raises(ValueError, match="Unsupported video extension"):
+            pipeline.run(raw_root=raw_root, out_root=out_root, video_path=bad_ext)
+
+        misplaced = raw_root / "root_video.mp4"
+        misplaced.write_bytes(b"fake")
+        with pytest.raises(ValueError, match="label folder"):
+            pipeline.run(raw_root=raw_root, out_root=out_root, video_path=misplaced)
+
+        outside = tmp_path / "outside.mp4"
+        outside.write_bytes(b"fake")
+        with pytest.raises(ValueError, match="inside"):
+            pipeline.run(raw_root=raw_root, out_root=out_root, video_path=outside)
 
 
 # ---------------------------------------------------------------------------

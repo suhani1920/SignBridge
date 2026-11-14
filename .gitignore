@@ -6,6 +6,7 @@
 
 # --- Python environment ---
 .venv/
+.venv312/
 __pycache__/
 *.pyc
 *.pyo

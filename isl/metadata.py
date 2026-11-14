@@ -45,9 +45,11 @@ def load_metadata(path: pathlib.Path = METADATA_PATH) -> list[dict]:
 
 
 def upsert_row(row: dict, path: pathlib.Path = METADATA_PATH) -> None:
-    """Add or replace a metadata row keyed on ``sample_id``.
+    """Add or replace a metadata row keyed on ``(gloss, sample_id)``.
 
-    - If ``sample_id`` already exists in the file, its row is overwritten.
+    - If ``(gloss, sample_id)`` already exists in the file, its row is
+      updated while preserving any existing nonblank ``meaning`` when the
+      incoming ``meaning`` is blank.
     - If it does not exist, a new row is appended.
     - Columns not in ``COLUMNS`` are silently ignored.
     - The file is written atomically so a crash mid-write leaves the
@@ -56,24 +58,33 @@ def upsert_row(row: dict, path: pathlib.Path = METADATA_PATH) -> None:
     Parameters
     ----------
     row:
-        A dict with at least ``sample_id`` set.  Missing columns are
-        written as empty strings.
+        A dict with at least ``gloss`` and ``sample_id`` set. Missing
+        columns are written as empty strings.
     path:
         CSV file path (defaults to ``isl/metadata.csv``).
     """
     rows = load_metadata(path)
+    key = (str(row.get("gloss", "")), str(row.get("sample_id", "")))
 
-    # Remove any existing row with the same sample_id
-    rows = [r for r in rows if r.get("sample_id") != row.get("sample_id")]
+    existing_meaning = ""
+    kept_rows = []
+    for r in rows:
+        if (r.get("gloss", ""), r.get("sample_id", "")) == key:
+            if r.get("meaning", "").strip():
+                existing_meaning = r["meaning"]
+        else:
+            kept_rows.append(r)
 
     # Build a clean row with all required columns
     clean = {col: str(row.get(col, "")) for col in COLUMNS}
-    rows.append(clean)
+    if not clean["meaning"].strip() and existing_meaning:
+        clean["meaning"] = existing_meaning
+    kept_rows.append(clean)
 
     # Sort by gloss then sample_id for stable output
-    rows.sort(key=lambda r: (r.get("gloss", ""), r.get("sample_id", "")))
+    kept_rows.sort(key=lambda r: (r.get("gloss", ""), r.get("sample_id", "")))
 
-    _write_csv(rows, path)
+    _write_csv(kept_rows, path)
 
 
 def _write_csv(rows: list[dict], path: pathlib.Path) -> None:

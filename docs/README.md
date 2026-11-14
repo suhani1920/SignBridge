@@ -184,17 +184,16 @@ Existing rows are updated in place — no duplicates.
 ## 6. Setup
 
 ### Requirements
-- **Python 3.10, 3.11, or 3.12** (Python 3.13 also works with the installed package versions)
+- **Python 3.12**
 - A terminal open at the repo root
 
 ### Step 1 — Check your Python version
 
 ```bash
-python3 --version
+python3.12 --version
 ```
 
-You should see `Python 3.10.x`, `3.11.x`, or later. If you see 2.x,
-use `python3` explicitly everywhere.
+You should see `Python 3.12.x`.
 
 ### Step 2 — Create a virtual environment
 
@@ -202,7 +201,7 @@ A virtual environment keeps this project's packages separate from
 your system Python. Run this once, from the repo root:
 
 ```bash
-python3 -m venv .venv
+python3.12 -m venv .venv312
 ```
 
 ### Step 3 — Activate the virtual environment
@@ -210,11 +209,11 @@ python3 -m venv .venv
 Run this every time you open a new terminal:
 
 ```bash
-source .venv/bin/activate      # macOS / Linux
-# .venv\Scripts\activate       # Windows
+source .venv312/bin/activate      # macOS / Linux
+# .venv312\Scripts\activate       # Windows
 ```
 
-You should see `(.venv)` at the start of your prompt.
+You should see `(.venv312)` at the start of your prompt.
 
 ### Step 4 — Install dependencies
 
@@ -285,7 +284,7 @@ tests/test_features.py::TestSchema::test_constants_match_expected_values  PASSED
 
 | Error message | Likely cause | Fix |
 |---|---|---|
-| `ModuleNotFoundError: No module named 'mediapipe'` | Dependencies not installed | Run `pip install -r docs/requirements.txt` with `.venv` active |
+| `ModuleNotFoundError: No module named 'mediapipe'` | Dependencies not installed | Run `pip install -r docs/requirements.txt` with `.venv312` active |
 | `OpenCV could not open '...'` | Bad codec, truncated file, or permission | Re-export the video as plain H.264 `.mp4`; check file permissions |
 | `Only N frame(s) had a detected hand (minimum required: 5)` | Hand not visible, bad lighting, or very short clip | Re-record with better lighting; ensure the signing hand is in frame |
 | `No label subfolders found under raw_videos/` | `raw_videos/` is empty | Create a label subfolder and add videos (see §4) |
@@ -344,7 +343,7 @@ All tests must pass with 0 failures and 0 errors.
 
 - **Never commit** video files (`.mp4`, `.mov`, `.avi`, `.webm`).
 - **Never commit** generated `.npz` files or `isl/metadata.csv`.
-- **Never commit** the `.venv/` folder.
+- **Never commit** the `.venv/` or `.venv312/` folder.
 - Always work on a **feature branch**, not directly on `main`.
 - Stage files explicitly by name — do not use `git add .`.
 

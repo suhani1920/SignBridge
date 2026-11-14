@@ -64,13 +64,13 @@ One compressed NumPy archive per accepted video clip.
 
 ## Output File: `isl/metadata.csv`
 
-One row per accepted video clip. Updated by each pipeline run.
+One row per accepted video clip, uniquely keyed by `(gloss, sample_id)`. Updated by each pipeline run.
 
 | Column | Type | Description |
 |---|---|---|
 | `sample_id` | string | Video filename without extension, e.g. `hello_001` |
 | `gloss` | string | Sign label (label folder name), e.g. `hello` |
-| `meaning` | string | Human-readable English gloss (filled in by team; blank until then) |
+| `meaning` | string | Human-readable English gloss (blank until human annotation; nonblank existing values are preserved on pipeline reruns) |
 | `video_path` | string | Relative path to source video |
 | `npz_path` | string | Relative path to generated `.npz` file |
 | `num_frames` | integer | Number of detected-hand frames used in `pose_seq` |

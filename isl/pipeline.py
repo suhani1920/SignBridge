@@ -6,8 +6,9 @@ What this file does
 Run this module from the repo root to process every video under
 ``isl/raw_videos/`` and write normalised pose data to ``isl/extracted/``.
 
-Usage (run from repo root after activating .venv):
+Usage (run from repo root after activating .venv312):
     python -m isl.pipeline
+    python -m isl.pipeline --video isl/raw_videos/hello/hello_001.mp4
 
 What it does, step by step:
   1. Scans ``isl/raw_videos/`` for label subfolders and video files.
@@ -29,6 +30,7 @@ Output files
 
 from __future__ import annotations
 
+import argparse
 import pathlib
 import sys
 import time
@@ -56,10 +58,38 @@ def _is_stale(video_path: pathlib.Path, npz_path: pathlib.Path) -> bool:
     return video_path.stat().st_mtime > npz_path.stat().st_mtime
 
 
-def _process_video(video_path: pathlib.Path, gloss: str) -> dict | None:
+def _validate_single_video(
+    video_path: pathlib.Path, raw_root: pathlib.Path = RAW_ROOT
+) -> tuple[pathlib.Path, str]:
+    """Validate that *video_path* is a supported video inside *raw_root*/<gloss>/."""
+    vp = pathlib.Path(video_path)
+    if not vp.is_file():
+        raise FileNotFoundError(f"Video not found: {vp}")
+    if vp.suffix.lower() not in VIDEO_EXTENSIONS:
+        raise ValueError(
+            f"Unsupported video extension '{vp.suffix}' for {vp.name}. "
+            f"Supported: {', '.join(VIDEO_EXTENSIONS)}"
+        )
+    try:
+        rel = vp.resolve().relative_to(raw_root.resolve())
+    except ValueError as exc:
+        raise ValueError(
+            f"Video must be inside {raw_root}/<gloss>/: {vp}"
+        ) from exc
+    if len(rel.parts) != 2 or rel.parts[0].startswith("."):
+        raise ValueError(
+            f"Video must be directly inside a label folder {raw_root}/<gloss>/: {vp}"
+        )
+    gloss = rel.parts[0]
+    return raw_root / gloss / vp.name, gloss
+
+
+def _process_video(
+    video_path: pathlib.Path, gloss: str, out_root: pathlib.Path = OUT_ROOT
+) -> dict | None:
     """Process one video. Returns the metadata dict on success, None on failure."""
     sample_id = video_path.stem
-    npz_path = OUT_ROOT / gloss / f"{sample_id}.npz"
+    npz_path = out_root / gloss / f"{sample_id}.npz"
 
     if not _is_stale(video_path, npz_path):
         print(f"  [skip — up to date] {video_path.name}")
@@ -111,8 +141,12 @@ def _process_video(video_path: pathlib.Path, gloss: str) -> dict | None:
 # ---------------------------------------------------------------------------
 
 
-def run(raw_root: pathlib.Path = RAW_ROOT, out_root: pathlib.Path = OUT_ROOT) -> None:
-    """Run the full batch pipeline."""
+def run(
+    raw_root: pathlib.Path = RAW_ROOT,
+    out_root: pathlib.Path = OUT_ROOT,
+    video_path: pathlib.Path | None = None,
+) -> None:
+    """Run the full batch pipeline (or a single video when *video_path* is given)."""
 
     if not raw_root.exists():
         print(
@@ -121,6 +155,21 @@ def run(raw_root: pathlib.Path = RAW_ROOT, out_root: pathlib.Path = OUT_ROOT) ->
             "Example: isl/raw_videos/hello/hello_001.mp4"
         )
         sys.exit(1)
+
+    if video_path is not None:
+        vp, gloss = _validate_single_video(video_path, raw_root)
+        print(f"\n[{gloss}] 1 video(s)")
+        meta = _process_video(vp, gloss, out_root)
+        processed, skipped = (1, 0) if meta is not None else (0, 1)
+        if meta is not None:
+            upsert_row(meta)
+        print(
+            f"\n{'='*50}\n"
+            f"Done.  Processed: {processed}  |  Skipped/failed: {skipped}\n"
+            f"Output: {out_root}/\n"
+            f"Index:  isl/metadata.csv\n"
+        )
+        return
 
     # --- warn about misplaced videos ---
     misplaced = check_video_placement(raw_root)
@@ -163,7 +212,7 @@ def run(raw_root: pathlib.Path = RAW_ROOT, out_root: pathlib.Path = OUT_ROOT) ->
         print(f"\n[{gloss}] {len(videos)} video(s)")
 
         for vp in videos:
-            meta = _process_video(vp, gloss)
+            meta = _process_video(vp, gloss, out_root)
             if meta is None:
                 skipped += 1
             else:
@@ -179,5 +228,17 @@ def run(raw_root: pathlib.Path = RAW_ROOT, out_root: pathlib.Path = OUT_ROOT) ->
     )
 
 
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Run the P1 ISL video pipeline.")
+    parser.add_argument(
+        "--video",
+        type=pathlib.Path,
+        default=None,
+        help="Process only this single video inside isl/raw_videos/<gloss>/.",
+    )
+    args = parser.parse_args(argv)
+    run(video_path=args.video)
+
+
 if __name__ == "__main__":
-    run()
+    main()
