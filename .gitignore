@@ -1,0 +1,46 @@
+# Root .gitignore for SignBridge
+# -------------------------------------------------------
+# Keep source code, tests, docs, and folder placeholders.
+# Keep raw videos, generated data, and credentials OUT.
+# -------------------------------------------------------
+
+# --- Python environment ---
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# --- Raw video files (never commit) ---
+*.mp4
+*.mov
+*.avi
+*.webm
+*.mkv
+
+# --- Generated pose / feature data (never commit) ---
+isl/extracted/**/*.npz
+isl/metadata.csv
+
+# --- ChromaDB database (not yet implemented; exclude when created) ---
+isl/db/
+
+# --- macOS system files ---
+.DS_Store
+Thumbs.db
+
+# --- Editor files ---
+.idea/
+.vscode/
+*.swp
+
+# DO NOT ignore:
+#   isl/raw_videos/README.md   ← placeholder; teammates need it
+#   isl/extracted/README.md    ← placeholder; documents output format
+#   isl/**/*.py                ← source code
+#   tests/**/*.py              ← tests
+#   docs/                      ← documentation
+#   AGENTS.md                  ← contributor rules
