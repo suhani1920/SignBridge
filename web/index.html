@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ISL Two-Way Translator</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Import Maps for Three.js and MediaPipe Tasks Vision -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://esm.sh/three@0.160.0",
+          "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/",
+          "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.9/+esm"
+        }
+      }
+    </script>
+</head>
+<body>
+   <header class="app-header">
+        <div class="logo-area">
+            <div class="brand-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            </div>
+            <div class="brand-text">
+                <h1>SignBridge</h1>
+                <span class="brand-subtitle">ISL Translator</span>
+            </div>
+            <span id="backend-status" class="badge warning" title="Checking backend health...">Connecting...</span>
+        </div>
+        <nav class="tabs" role="tablist">
+            <button role="tab" aria-selected="true" aria-controls="panel-sign-to-text" id="tab-sign-to-text" class="tab-btn active">Sign → Text</button>
+            <button role="tab" aria-selected="false" aria-controls="panel-text-to-sign" id="tab-text-to-sign" class="tab-btn">Text → Sign</button>
+        </nav>
+    </header>
+
+    <main class="app-main">
+        <!-- TAB 1: SIGN -> TEXT -->
+        <section id="panel-sign-to-text" role="tabpanel" aria-labelledby="tab-sign-to-text" class="tab-panel active">
+            <div class="split-view">
+                <div class="camera-card card">
+                    <div class="view-container">
+                        <video id="webcam" autoplay playsinline muted></video>
+                        <canvas id="output-canvas"></canvas>
+                        <div id="camera-overlay-msg" class="overlay-msg hidden">Camera feed inactive</div>
+                    </div>
+                    <div class="controls-row">
+                        <button id="toggle-camera-btn" class="btn primary">Start Camera</button>
+                        <button id="capture-sign-btn" class="btn secondary" disabled>Capture Sign Now</button>
+                        <div class="toggle-container">
+                            <label for="mock-mode-toggle">Mock Backend</label>
+                            <input type="checkbox" id="mock-mode-toggle" checked>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="translation-card card">
+                    <h2>Live Recognition</h2>
+                    <div class="current-output-box">
+                        <div class="label-display">
+                            <span id="current-label" class="placeholder">Waiting for sign...</span>
+                            <span id="current-status" class="status-badge">Idle</span>
+                        </div>
+                        <div class="confidence-meter">
+                            <div id="confidence-bar" class="meter-fill" style="width: 0%"></div>
+                        </div>
+                        <div id="alternatives-box" class="alternatives-list">
+                            <!-- Alternatives rendered dynamically -->
+                        </div>
+                    </div>
+
+                    <div class="sentence-history-box">
+                        <div class="header-row">
+                            <h3>Sentence History</h3>
+                            <div class="action-buttons">
+                                <button id="copy-sentence-btn" class="btn sm">Copy</button>
+                                <button id="clear-sentence-btn" class="btn sm danger">Clear</button>
+                            </div>
+                        </div>
+                        <div id="sentence-output" class="sentence-text" aria-live="polite"></div>
+                    </div>
+
+                    <div class="debug-panel">
+                        <span>FPS: <strong id="debug-fps">0</strong></span>
+                        <span>API Latency: <strong id="debug-latency">0ms</strong></span>
+                        <span>Hands Detected: <strong id="debug-hands">0</strong></span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: TEXT -> SIGN -->
+        <section id="panel-text-to-sign" role="tabpanel" aria-labelledby="tab-text-to-sign" class="tab-panel hidden">
+            <div class="split-view">
+                <div class="input-card card">
+                    <h2>Synthesize Sign Language</h2>
+                    <div class="input-group">
+                        <input type="text" id="sign-text-input" placeholder="Type text to translate into sign..." />
+                        <button id="translate-text-btn" class="btn primary">Translate</button>
+                    </div>
+                    <div class="chips-container" id="word-chips">
+                        <!-- Word matching chips appear here -->
+                    </div>
+                    <div class="video-preview-container" id="reference-video-container">
+                        <h3>Reference Video</h3>
+                        <video id="reference-video" controls muted playsinline class="hidden"></video>
+                        <p id="no-video-msg" class="muted-text">Select a matched word chip to view its reference recording.</p>
+                    </div>
+                </div>
+
+                <div class="renderer-card card">
+                    <div class="renderer-header">
+                        <h2>3D Avatar Player</h2>
+                        <div class="playback-controls">
+                            <button id="play-pause-btn" class="btn sm" disabled>Play</button>
+                            <button id="restart-btn" class="btn sm" disabled>Restart</button>
+                            <label>Speed: <input type="range" id="speed-slider" min="0.25" max="2.0" step="0.25" value="1.0"></label>
+                            <label><input type="checkbox" id="loop-toggle" checked> Loop</label>
+                        </div>
+                    </div>
+                    <div id="canvas-3d-container">
+                        <div id="current-word-sign" class="current-word-overlay">Ready</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Global Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Main Entry Point -->
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
