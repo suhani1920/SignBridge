@@ -84,16 +84,40 @@ def _validate_single_video(
     return raw_root / gloss / vp.name, gloss
 
 
+def _unpack_outcome(
+    result: tuple[str, dict | None] | dict | None,
+) -> tuple[str, dict | None]:
+    """Normalise _process_video return value into (status, metadata_or_none)."""
+    if isinstance(result, tuple):
+        return result
+    if isinstance(result, dict):
+        return "processed", result
+    return "skipped", None
+
+
 def _process_video(
     video_path: pathlib.Path, gloss: str, out_root: pathlib.Path = OUT_ROOT
-) -> dict | None:
-    """Process one video. Returns the metadata dict on success, None on failure."""
+) -> tuple[str, dict | None]:
+    """Process one video. Returns (status, metadata_dict_or_none)."""
     sample_id = video_path.stem
     npz_path = out_root / gloss / f"{sample_id}.npz"
 
     if not _is_stale(video_path, npz_path):
         print(f"  [skip — up to date] {video_path.name}")
-        return None
+        try:
+            with np.load(npz_path, allow_pickle=True) as data:
+                num_frames = int(data["pose_seq"].shape[0])
+        except Exception as exc:
+            print(f"\n  [ERROR] {npz_path.name}: {exc}")
+            return "error", None
+        return "cached", {
+            "sample_id": sample_id,
+            "gloss": gloss,
+            "meaning": "",
+            "video_path": str(video_path),
+            "npz_path": str(npz_path),
+            "num_frames": num_frames,
+        }
 
     print(f"  [extract]  {video_path.name} ...", end="", flush=True)
     t0 = time.monotonic()
@@ -102,10 +126,10 @@ def _process_video(
         sample = extract_sample(video_path, gloss)
     except SkipVideo as exc:
         print(f"\n  [SKIP] {video_path.name}: {exc}")
-        return None
+        return "skipped", None
     except Exception as exc:
         print(f"\n  [ERROR] {video_path.name}: {exc}")
-        return None
+        return "error", None
 
     # Normalise
     raw_seq = sample.pose_seq                           # (T, 21, 3)
@@ -126,7 +150,7 @@ def _process_video(
     elapsed = time.monotonic() - t0
     print(f" done ({sample.detected_frames} frames, {elapsed:.1f}s)")
 
-    return {
+    return "processed", {
         "sample_id": sample_id,
         "gloss": gloss,
         "meaning": "",
@@ -159,13 +183,21 @@ def run(
     if video_path is not None:
         vp, gloss = _validate_single_video(video_path, raw_root)
         print(f"\n[{gloss}] 1 video(s)")
-        meta = _process_video(vp, gloss, out_root)
-        processed, skipped = (1, 0) if meta is not None else (0, 1)
+        processed, cached, skipped, errors = 0, 0, 0, 0
+        status, meta = _unpack_outcome(_process_video(vp, gloss, out_root))
+        if status == "processed":
+            processed += 1
+        elif status == "cached":
+            cached += 1
+        elif status == "skipped":
+            skipped += 1
+        else:
+            errors += 1
         if meta is not None:
             upsert_row(meta)
         print(
             f"\n{'='*50}\n"
-            f"Done.  Processed: {processed}  |  Skipped/failed: {skipped}\n"
+            f"Done.  Processed: {processed}  |  Cached: {cached}  |  Skipped: {skipped}  |  Errors: {errors}\n"
             f"Output: {out_root}/\n"
             f"Index:  isl/metadata.csv\n"
         )
@@ -196,7 +228,7 @@ def run(
         )
         return
 
-    processed, skipped, errors = 0, 0, 0
+    processed, cached, skipped, errors = 0, 0, 0, 0
 
     for label_dir in label_dirs:
         gloss = label_dir.name
@@ -212,17 +244,22 @@ def run(
         print(f"\n[{gloss}] {len(videos)} video(s)")
 
         for vp in videos:
-            meta = _process_video(vp, gloss, out_root)
-            if meta is None:
+            status, meta = _unpack_outcome(_process_video(vp, gloss, out_root))
+            if status == "processed":
+                processed += 1
+            elif status == "cached":
+                cached += 1
+            elif status == "skipped":
                 skipped += 1
             else:
+                errors += 1
+            if meta is not None:
                 upsert_row(meta)
-                processed += 1
 
     # --- summary ---
     print(
         f"\n{'='*50}\n"
-        f"Done.  Processed: {processed}  |  Skipped/failed: {skipped + errors}\n"
+        f"Done.  Processed: {processed}  |  Cached: {cached}  |  Skipped: {skipped}  |  Errors: {errors}\n"
         f"Output: {out_root}/\n"
         f"Index:  isl/metadata.csv\n"
     )

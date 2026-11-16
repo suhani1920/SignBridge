@@ -412,6 +412,133 @@ class TestPipelineHelpers:
         with pytest.raises(ValueError, match="inside"):
             pipeline.run(raw_root=raw_root, out_root=out_root, video_path=outside)
 
+    def test_pipeline_distinct_outcome_counts_and_reporting(
+        self,
+        tmp_path: pathlib.Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ):
+        """Batch and single-video runs report processed, cached, skipped, and error counts separately."""
+        raw_root = tmp_path / "raw_videos"
+        out_root = tmp_path / "extracted"
+        tmp_csv = tmp_path / "metadata.csv"
+        hello_dir = raw_root / "hello"
+        hello_dir.mkdir(parents=True)
+
+        v_cached = hello_dir / "01_cached.mp4"
+        v_proc = hello_dir / "02_proc.mp4"
+        v_skip = hello_dir / "03_skip.mp4"
+        v_err = hello_dir / "04_err.mp4"
+        for vp in (v_cached, v_proc, v_skip, v_err):
+            vp.write_bytes(b"fake")
+
+        # Create up-to-date .npz for v_cached with a newer mtime than the video
+        npz_cached = out_root / "hello" / f"{v_cached.stem}.npz"
+        npz_cached.parent.mkdir(parents=True, exist_ok=True)
+        norm = normalize_sequence(_random_seq(T=7))
+        np.savez_compressed(
+            npz_cached,
+            pose_seq=norm,
+            vec=build_vec(norm),
+            flat_vec=build_flat_vec(norm),
+            gloss=np.array("hello"),
+        )
+        os_mtime = v_cached.stat().st_mtime
+        import os
+        os.utime(v_cached, (os_mtime - 10, os_mtime - 10))
+        os.utime(npz_cached, (os_mtime, os_mtime))
+
+        extracted_Targets: list[pathlib.Path] = []
+
+        def fake_extract_sample(vp: pathlib.Path, gloss: str) -> SignSample:
+            extracted_Targets.append(vp)
+            if vp == v_skip:
+                raise SkipVideo("only 2 hand frames")
+            if vp == v_err:
+                raise RuntimeError("decoder error")
+            frames = [PoseFrame(i, _random_frame(i), detected=True) for i in range(6)]
+            return SignSample(vp.stem, gloss, str(vp), 25.0, frames)
+
+        monkeypatch.setattr(pipeline, "extract_sample", fake_extract_sample)
+        monkeypatch.setattr(pipeline, "upsert_row", lambda row: upsert_row(row, tmp_csv))
+
+        pipeline.run(raw_root=raw_root, out_root=out_root)
+        out_text = capsys.readouterr().out
+
+        assert extracted_Targets == [v_proc, v_skip, v_err]
+        assert "Done.  Processed: 1  |  Cached: 1  |  Skipped: 1  |  Errors: 1" in out_text
+
+        # Single-video run on cached clip reports Cached: 1 and does not count as failure
+        pipeline.run(raw_root=raw_root, out_root=out_root, video_path=v_cached)
+        single_out = capsys.readouterr().out
+        assert "Done.  Processed: 0  |  Cached: 1  |  Skipped: 0  |  Errors: 0" in single_out
+
+    def test_cached_npz_restores_missing_metadata_and_preserves_meaning(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """Up-to-date .npz restores missing metadata rows without re-extraction and keeps manual meaning."""
+        import os
+
+        raw_root = tmp_path / "raw_videos"
+        out_root = tmp_path / "extracted"
+        tmp_csv = tmp_path / "metadata.csv"
+        hello_dir = raw_root / "hello"
+        hello_dir.mkdir(parents=True)
+
+        v1 = hello_dir / "hello_001.mp4"
+        v2 = hello_dir / "hello_002.mp4"
+        v1.write_bytes(b"fake1")
+        v2.write_bytes(b"fake2")
+
+        out_hello = out_root / "hello"
+        out_hello.mkdir(parents=True)
+        npz1 = out_hello / "hello_001.npz"
+        npz2 = out_hello / "hello_002.npz"
+
+        for vp, npz_path, n_frames in ((v1, npz1, 12), (v2, npz2, 18)):
+            seq = normalize_sequence(_random_seq(T=n_frames))
+            np.savez_compressed(
+                npz_path,
+                pose_seq=seq,
+                vec=build_vec(seq),
+                flat_vec=build_flat_vec(seq),
+                gloss=np.array("hello"),
+            )
+            mtime = vp.stat().st_mtime
+            os.utime(vp, (mtime - 10, mtime - 10))
+            os.utime(npz_path, (mtime, mtime))
+
+        # Pre-populate v1 with a manual meaning; leave v2 missing from metadata.csv
+        upsert_row(
+            {
+                "sample_id": "hello_001",
+                "gloss": "hello",
+                "meaning": "Hello greeting",
+                "video_path": str(v1),
+                "npz_path": str(npz1),
+                "num_frames": 12,
+            },
+            tmp_csv,
+        )
+
+        def fail_extract(*args, **kwargs):
+            pytest.fail("extract_sample should not be called for up-to-date .npz")
+
+        monkeypatch.setattr(pipeline, "extract_sample", fail_extract)
+        monkeypatch.setattr(pipeline, "upsert_row", lambda row: upsert_row(row, tmp_csv))
+
+        pipeline.run(raw_root=raw_root, out_root=out_root)
+
+        rows = load_metadata(tmp_csv)
+        assert len(rows) == 2
+        by_id = {r["sample_id"]: r for r in rows}
+        assert by_id["hello_001"]["meaning"] == "Hello greeting"
+        assert by_id["hello_001"]["num_frames"] == "12"
+        assert by_id["hello_002"]["meaning"] == ""
+        assert by_id["hello_002"]["num_frames"] == "18"
+        assert by_id["hello_002"]["video_path"] == str(v2)
+        assert by_id["hello_002"]["npz_path"] == str(npz2)
+
 
 # ---------------------------------------------------------------------------
 # TestNpzOutputShape

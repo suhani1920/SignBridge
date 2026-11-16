@@ -2,7 +2,7 @@
 
 > **Document purpose:** Concise record of verified codebase facts, active architectural conflicts, recommended canonical paths/formats, and required team decisions for the P1 video-data pipeline.
 > **Status:** Working draft / state report.
-> **Last updated:** 2026-11-14 (section 9 updated with Python 3.12 + MediaPipe 0.10.21 verification).
+> **Last updated:** 2026-11-16 (Section 9.16 added: P1 pipeline reliability fixes and test verification).
 
 ---
 
@@ -17,7 +17,7 @@
   - `isl/metadata.py`: Reads/upserts `metadata.csv` atomically with columns: `sample_id`, `gloss`, `meaning`, `video_path`, `npz_path`, `num_frames`.
   - `isl/pipeline.py`: Batch processor scanning input videos, running extraction and normalization, outputting `.npz` files and updating metadata.
   - `tests/test_features.py`: Unit tests covering schema, normalization math, metadata upsert, and output shapes using synthetic data.
-- **Verification Status:** Full test suite verified passing (44 passed, Section 9.11). Full Hello batch extraction and P1-to-P2 bridge verification completed across all 36 clips (Section 9.13).
+- **Verification Status:** Full test suite verified passing (46 passed, Section 9.16). Two-class pipeline smoke test completed across 38 samples (36 hello, 2 help) with 100% reported for both labels (Section 9.15).
 
 ---
 
@@ -33,6 +33,8 @@
    - `extract.py` and `schema.py` assume a single hand (`max_num_hands=1`), whereas many Indian Sign Language (ISL) signs require two hands (bimanual).
 4. **ChromaDB / Vector DB Scope:**
    - Mentioned in `CONTRACT.md` and `README.md` as planned future work, but `e668516` added `data/db/chroma/README.md`.
+5. **Landmark Normalization Reference Inversion (Landmark 9 vs 12):**
+   - Current P1 (`isl/normalize.py`) scales by landmark 9 (middle MCP) and Y-aligns by landmark 12 (middle tip). P2 (`isl/features.py`) scales by landmark 12 and Y-aligns by landmark 12. This creates a mathematical scale mismatch between P1 database poses and P2 live inference. See Section 9.14.
 
 ---
 
@@ -91,6 +93,7 @@
 3. **One Hand vs Two Hands:** Confirm whether P1 MVP only supports one-handed signs or if two-hand extraction is required before P2 model training begins.
 4. **Train / Val / Test Partitioning:** Decide whether dataset splitting (`split` column) is managed by P1 in `metadata.csv` or handled dynamically by P2.
 5. **English Meaning Annotation:** Confirm workflow for populating the `meaning` column in `metadata.csv`.
+6. **Scale & Y-Alignment Landmark Consensus:** Team must confirm whether to align P1 with blueprint/P2 on landmark-12 scaling (wrist-to-fingertip) or update P2 to landmark-9 scaling (palm height).
 
 ---
 
@@ -401,3 +404,68 @@ Either pin `mediapipe` to a compatible 0.10.x in `docs/requirements.txt` (P1-own
 - **Important Caveat:**
   - The 100% metric validates end-to-end **batch processing mechanics, bridge translation, and evaluation stability** at dataset scale.
   - It does **not** measure multi-class recognition accuracy or class separability, as no negative/distractor classes exist in the dataset yet.
+
+### 9.14 Landmark 9 vs 12 Normalization Reference Review (2026-11-16)
+
+> Read-only audit across blueprint, contracts, P1 normalization, and P2 recognition/bridge code. No code modified, no data reprocessed.
+
+#### 1. What Each Component Implements & Expects
+
+| Component | Scale Reference | Y-Alignment Reference | Details / Verification |
+|---|---|---|---|
+| **Original Blueprint** | Landmark 12 (middle fingertip) | Landmark 9 (middle MCP) | Original handoff specification. |
+| **Current P1 (`isl/normalize.py`)** | Landmark 9 (`‖lm9‖ ≈ 1.0`) | Landmark 12 (rotates tip to +Y) | Palm height scaling, tip Y-alignment (`docs/CONTRACT.md` Part 1). |
+| **Current P2 (`isl/features.py`)** | Landmark 12 (`‖lm12‖ = 1.0`) | Landmark 12 (rotates tip to +Y) | `_MIDDLE_TIP_IDX = 12` used for both scale and alignment. Verified in `test_normalize_hand_wrist_origin_and_unit_scale` (`assert ‖normed[12]‖ == 1.0`). |
+| **P2 Live Inference (`isl/adapter.py`, `isl/matcher.py`)** | Landmark 12 | Landmark 12 | `RecognitionService.recognize()` and `SignRecognizer.process_frame()` normalize live inputs using `isl.features.normalize_hand()`, expecting landmark-12 scaling. |
+| **P1-to-P2 Bridge (`isl/export_p2.py`)** | Landmark 9 (inherited from P1) | Landmark 12 (inherited from P1) | Passes P1 `pose_seq` directly into slot 0 without re-normalizing. |
+
+#### 2. Findings & Conclusions
+
+1. **Which rule P2 actually expects:**
+   P2 expects **Landmark 12 for scaling** (and Landmark 12 for Y-alignment). Live recognition normalizes live inputs via `isl.features.normalize_hand()` where scale is `‖wrist − landmark 12‖`. Because P1 archives were scaled by Landmark 9 (`‖wrist − landmark 9‖ ≈ 1.0`), database poses in `data/pose_db/` have `‖lm12‖ ≈ 1.8–2.2`, whereas live query poses have `‖lm12‖ = 1.0`. LOOCV passed only because evaluation compared database samples against database samples.
+2. **Whether this reversal was an intentional team decision:**
+   **No.** Git history and repository documentation show no team decision or discussion approving a reversal. In commit `71fd80d`, `isl/schema.py`'s docstring header still read `(wrist-origin, landmark-12 scale)` while the function body scaled by 9. `docs/P1_STATE.md` (issue 7.3 #8) had flagged this as an unresolved inconsistency. P2 authored its contract (`567d254`) explicitly stating "scaled by wrist-to-middle-fingertip distance" (landmark 12). The inversion was an unintended discrepancy in P1 implementation.
+3. **Outputs requiring regeneration if P1 is updated to Landmark 12 scale:**
+   - `isl/extracted/**/*.npz` (all 36 `hello` archives in P1, as `pose_seq`, `vec`, and `flat_vec` embed the scale).
+   - `data/pose_db/*.npz` (all 36 P2 database archives, as `sequence` and `summary` inherit coordinates from P1).
+   - `data/pose_db/.posedb_*.npz` (PoseDatabase disk index cache).
+   - Downstream benchmark / evaluation metrics.
+   *(Note: Raw video recordings in `isl/raw_videos/` are unaffected; `isl/metadata.csv` requires no schema changes).*
+4. **Team Decision Needed:**
+   The team must formally decide whether to:
+   - **Option A (Align with Blueprint & P2):** Update P1 (`isl/normalize.py`) to scale by Landmark 12 (and align by Landmark 12 or 9 per agreed convention) and regenerate `isl/extracted/` and `data/pose_db/`.
+   - **Option B (Standardize on Landmark 9 Palm-Scale):** Update P2 (`isl/features.py:normalize_hand`) and its unit tests to scale by Landmark 9, keeping existing P1 extractions intact.
+
+### 9.15 Two-Class Pipeline Smoke Test: Hello & Help (2026-11-16)
+
+- **Video Extraction:**
+  - Processed second ISL500 `help` clip (`help__ISL500__00115__Help__session155__clip011.mp4`) with 50 detected hand frames (joining the first `help` clip with 56 detected frames).
+  - Total extracted samples across two glosses: 38 (36 `hello`, 2 `help`) indexed in `isl/metadata.csv`.
+- **P2 Export Bridge:**
+  - Ran `isl.export_p2` (`--src isl/extracted --dst data/pose_db`); successfully converted and exported all 38 archives (36 `hello`, 2 `help`) into `data/pose_db/` with single-hand data in slot 0 and `align_y=True`.
+- **Evaluator Outcome (LOOCV):**
+  - Ran `backend.scripts.evaluate` (`--data-dir data/pose_db`); loaded all 38 samples across both classes and completed with 100.00% Top-1 / Top-3 accuracy for both `hello` and `help` labels.
+- **Critical Caveat:**
+  - This is a small pipeline smoke test verifying end-to-end multi-label mechanics, directory indexing, and evaluator execution across classes.
+  - It is **not** reliable evidence of true recognition accuracy or generalizable discrimination, given the minimal sample size (only 2 `help` clips) and lack of a distinct test split.
+
+### 9.16 P1 Pipeline Reliability Fixes: Outcome Counts & Cached Metadata Restoration (2026-11-16)
+
+- **Issues resolved:**
+  1. **Distinct outcome tracking and reporting (7.3 #7):** Updated `isl/pipeline.py` (`_process_video` and `run`) to distinguish `"processed"`, `"cached"` (up-to-date `.npz`), `"skipped"` (`SkipVideo`), and `"error"` (`Exception`) outcomes. Both single-video and batch runs now report `Processed`, `Cached`, `Skipped`, and `Errors` separately instead of grouping normal cached skips under `Skipped/failed`.
+  2. **Metadata restoration on cached `.npz` (7.3 #4, #6):** When an up-to-date `.npz` is encountered, `_process_video` reads `pose_seq.shape[0]` from the existing archive without re-extracting the video, and `run()` upserts the metadata row via `upsert_row`, restoring missing rows if `metadata.csv` was deleted or out of sync while preserving any existing manually entered `meaning`.
+- **Files changed:**
+  - `isl/pipeline.py`: Updated `_process_video` to return `(status, metadata_or_none)`, added `_unpack_outcome`, restored metadata rows for cached `.npz` archives without re-extraction, and separated `processed`, `cached`, `skipped`, and `errors` counts in `run()`.
+  - `tests/test_features.py`: Added `TestPipelineHelpers::test_pipeline_distinct_outcome_counts_and_reporting` and `TestPipelineHelpers::test_cached_npz_restores_missing_metadata_and_preserves_meaning` using `tmp_path` and mocks (no real videos processed).
+  - `docs/P1_STATE.md`: Recorded the reliability fixes, commands executed, and test outcomes.
+- **Test commands and actual results:**
+  - Focused pipeline helper tests:
+    ```bash
+    .venv312/bin/python -m pytest tests/test_features.py -k TestPipelineHelpers -v
+    ```
+    Result: `6 passed, 33 deselected, 2 warnings in 13.51s`.
+  - Full test suite:
+    ```bash
+    .venv312/bin/python -m pytest -q
+    ```
+    Result: `46 passed, 2 warnings in 13.03s`.
