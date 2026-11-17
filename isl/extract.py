@@ -40,25 +40,17 @@ from isl.schema import (
 )
 
 
-# ---------------------------------------------------------------------------
-# Public exception
-# ---------------------------------------------------------------------------
 
 
 class SkipVideo(Exception):
     """Raised when a video is intentionally skipped (not an unexpected error)."""
 
 
-# ---------------------------------------------------------------------------
-# MediaPipe setup (module-level so it is initialised once per process)
-# ---------------------------------------------------------------------------
+# init once per process
 
 _mp_hands = mp.solutions.hands
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 
 def extract_sample(
@@ -102,11 +94,9 @@ def extract_sample(
     """
     video_path = pathlib.Path(video_path)
 
-    # --- guard: file exists ---
     if not video_path.exists():
         raise FileNotFoundError(f"Video not found: {video_path}")
 
-    # --- guard: supported extension ---
     ext = video_path.suffix.lower()
     if ext not in VIDEO_EXTENSIONS:
         raise ValueError(
@@ -114,7 +104,6 @@ def extract_sample(
             f"Supported: {', '.join(VIDEO_EXTENSIONS)}"
         )
 
-    # --- open video ---
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         raise ValueError(
@@ -134,7 +123,6 @@ def extract_sample(
 
     _zero = np.zeros((NUM_LANDMARKS, NUM_COORDS), dtype=np.float32)
 
-    # --- run MediaPipe frame by frame ---
     with _mp_hands.Hands(
         static_image_mode=False,
         max_num_hands=max_num_hands,
@@ -164,7 +152,6 @@ def extract_sample(
 
     cap.release()
 
-    # --- guard: enough detected frames ---
     if sample.detected_frames < MIN_HAND_FRAMES:
         raise SkipVideo(
             f"Only {sample.detected_frames} frame(s) had a detected hand "

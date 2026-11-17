@@ -22,9 +22,6 @@ import numpy as np
 from isl.schema import NUM_LANDMARKS, NUM_COORDS, RESAMPLE_FRAMES
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 
 def normalize_sequence(
@@ -106,7 +103,6 @@ def build_flat_vec(norm_seq: np.ndarray, n_frames: int = RESAMPLE_FRAMES) -> np.
     if T == 0:
         return np.zeros(n_frames * NUM_LANDMARKS * NUM_COORDS, dtype=np.float32)
 
-    # Linear interpolation along the time axis using numpy
     old_indices = np.linspace(0, T - 1, T)
     new_indices = np.linspace(0, T - 1, n_frames)
     flat_original = norm_seq.reshape(T, -1)   # (T, 63)
@@ -118,32 +114,29 @@ def build_flat_vec(norm_seq: np.ndarray, n_frames: int = RESAMPLE_FRAMES) -> np.
     return resampled.flatten().astype(np.float32)   # (1890,)
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
 
 
 def _normalize_frame(frame: np.ndarray, *, align_y: bool) -> np.ndarray:
     """Normalise a single ``(21, 3)`` landmark array."""
     frame = frame.astype(np.float32).copy()
 
-    # 1. Wrist-origin translation
+    # wrist-origin translation
     wrist = frame[0].copy()
     frame -= wrist
 
-    # 2. Scale by wrist → middle-MCP distance
+    # scale by wrist-to-mcp9 distance
     scale = float(np.linalg.norm(frame[9]))
     if scale < 1e-6:
-        # Degenerate frame (all landmarks collapsed); return zeros
+        # degenerate frame fallback
         return np.zeros_like(frame)
     frame /= scale
 
-    # 3. Optional Y-alignment: rotate XY plane so landmark-12 → +Y
+    # rotate landmark 12 to +y
     if align_y:
         tip = frame[12]
         angle = np.arctan2(tip[0], tip[1])  # angle from +Y axis in XY plane
         cos_a, sin_a = np.cos(-angle), np.sin(-angle)
-        # Rotate x and y; leave z unchanged
+        # rotate xy only, keep z
         x = frame[:, 0].copy()
         y = frame[:, 1].copy()
         frame[:, 0] = cos_a * x - sin_a * y

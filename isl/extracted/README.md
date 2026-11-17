@@ -1,28 +1,26 @@
-# isl/extracted/ — Generated Pose Data
+isl/extracted/ - Generated Pose Data
 
-**Do NOT commit any `.npz` files here.**
+Do NOT commit any `.npz` files here.
 
-## Purpose
-This folder is written to by the P1 pipeline. Each accepted sign video
-produces one `.npz` file here. Generated files are excluded from Git by
-the root `.gitignore`.
+Purpose
+Written by the P1 pipeline (one `.npz` per accepted sign video) and excluded from Git by root `.gitignore`.
 
-## Folder layout (created automatically by the pipeline)
+Folder layout (created automatically by the pipeline)
 ```
 isl/extracted/
 └── <gloss>/
     └── <sample_id>.npz
 ```
 
-## What each .npz file contains
+What each .npz file contains
 | Array key   | dtype   | Shape        | Description |
 |-------------|---------|--------------|-------------|
 | `pose_seq`  | float32 | `(T, 21, 3)` | Per-frame hand landmarks (wrist-origin normalised). T = accepted frame count. |
-| `vec`       | float32 | `(252,)`     | Global feature vector: mean, std, min, max across T frames (21×3×4 = 252). |
-| `flat_vec`  | float32 | `(1890,)`    | Sequence resampled to 30 frames, then flattened (30×21×3 = 1890). |
+| `vec`       | float32 | `(252,)`     | Global feature vector: mean, std, min, max across T frames (21x3x4 = 252). |
+| `flat_vec`  | float32 | `(1890,)`    | Sequence resampled to 30 frames, then flattened (30x21x3 = 1890). |
 | `gloss`     | str     | scalar       | The sign label (folder name under `raw_videos/`). |
 
-## How to inspect a file
+How to inspect a file
 ```bash
 python -c "
 import numpy as np, pathlib, sys
@@ -33,6 +31,5 @@ for k, v in d.items():
 " isl/extracted/hello/hello_001.npz
 ```
 
-## Regenerate at any time
-Run the extraction pipeline again from the repo root; existing `.npz`
-files are overwritten only if the source video is newer than the output.
+Regenerate at any time
+Re-run the pipeline from the repo root; existing `.npz` files are overwritten only if the source video is newer.
