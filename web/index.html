@@ -1,135 +1,344 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
+  
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ISL Two-Way Translator</title>
-    <link rel="stylesheet" href="styles.css">
-    <!-- Import Maps for Three.js and MediaPipe Tasks Vision -->
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "https://esm.sh/three@0.160.0",
-          "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/",
-          "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.9/+esm"
-        }
+  <meta charset="UTF-8" />
+  <script>
+    if (!sessionStorage.getItem("isl_authenticated")) {
+      window.location.replace("./login.html");
+    }
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ISL Studio — Two-Way Indian Sign Language Translator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/",
+        "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm"
       }
-    </script>
+    }
+  </script>
 </head>
 <body>
-   <header class="app-header">
-        <div class="logo-area">
-            <div class="brand-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-            </div>
-            <div class="brand-text">
-                <h1>SignBridge</h1>
-                <span class="brand-subtitle">ISL Translator</span>
-            </div>
-            <span id="backend-status" class="badge warning" title="Checking backend health...">Connecting...</span>
+  <div class="app-shell">
+    <!-- Top Bar -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-emblem" aria-hidden="true">
+          <span></span><span></span>
         </div>
-        <nav class="tabs" role="tablist">
-            <button role="tab" aria-selected="true" aria-controls="panel-sign-to-text" id="tab-sign-to-text" class="tab-btn active">Sign → Text</button>
-            <button role="tab" aria-selected="false" aria-controls="panel-text-to-sign" id="tab-text-to-sign" class="tab-btn">Text → Sign</button>
-        </nav>
+        <div>
+          <div class="brand-row">
+            <h1 class="brand-title">Sign Bridge</h1>
+          
+          </div>
+          <p class="brand-subtitle">Real-Time Indian Sign Language translator</p>
+        </div>
+      </div>
+
+      <nav class="tab-nav" role="tablist" aria-label="Translation Direction">
+        <button
+          id="tab-btn-sign"
+          class="tab-btn is-active"
+          role="tab"
+          aria-selected="true"
+          aria-controls="panel-sign-to-text"
+          data-tab="sign-to-text"
+          type="button"
+        >
+          <span class="tab-step"></span> Sign &rarr; Text
+        </button>
+        <button
+          id="tab-btn-text"
+          class="tab-btn"
+          role="tab"
+          aria-selected="false"
+          aria-controls="panel-text-to-sign"
+          data-tab="text-to-sign"
+          type="button"
+        >
+          <span class="tab-step"></span> Text &rarr; Sign
+        </button>
+      </nav>
+
+      <div class="topbar-meta">
+        <div id="backend-status" class="status-pill" role="status" aria-live="polite">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="backend-status-text">Checking API…</span>
+        </div>
+        <button id="theme-toggle" class="icon-btn" type="button" aria-label="Toggle color theme" title="Toggle Light / Dark Theme">
+          <span id="theme-icon" aria-hidden="true">◐</span>
+        </button>
+      </div>
     </header>
 
-    <main class="app-main">
-        <!-- TAB 1: SIGN -> TEXT -->
-        <section id="panel-sign-to-text" role="tabpanel" aria-labelledby="tab-sign-to-text" class="tab-panel active">
-            <div class="split-view">
-                <div class="camera-card card">
-                    <div class="view-container">
-                        <video id="webcam" autoplay playsinline muted></video>
-                        <canvas id="output-canvas"></canvas>
-                        <div id="camera-overlay-msg" class="overlay-msg hidden">Camera feed inactive</div>
-                    </div>
-                    <div class="controls-row">
-                        <button id="toggle-camera-btn" class="btn primary">Start Camera</button>
-                        <button id="capture-sign-btn" class="btn secondary" disabled>Capture Sign Now</button>
-                        <div class="toggle-container">
-                            <label for="mock-mode-toggle">Mock Backend</label>
-                            <input type="checkbox" id="mock-mode-toggle" checked>
-                        </div>
-                    </div>
-                </div>
+    <!-- Offline / Mock Mode Banner -->
+    <div id="system-banner" class="system-banner hidden" role="region" aria-live="polite">
+      <span id="system-banner-msg"></span>
+      <button id="btn-retry-health" class="btn btn-sm" type="button">Retry Connection</button>
+    </div>
 
-                <div class="translation-card card">
-                    <h2>Live Recognition</h2>
-                    <div class="current-output-box">
-                        <div class="label-display">
-                            <span id="current-label" class="placeholder">Waiting for sign...</span>
-                            <span id="current-status" class="status-badge">Idle</span>
-                        </div>
-                        <div class="confidence-meter">
-                            <div id="confidence-bar" class="meter-fill" style="width: 0%"></div>
-                        </div>
-                        <div id="alternatives-box" class="alternatives-list">
-                            <!-- Alternatives rendered dynamically -->
-                        </div>
-                    </div>
-
-                    <div class="sentence-history-box">
-                        <div class="header-row">
-                            <h3>Sentence History</h3>
-                            <div class="action-buttons">
-                                <button id="copy-sentence-btn" class="btn sm">Copy</button>
-                                <button id="clear-sentence-btn" class="btn sm danger">Clear</button>
-                            </div>
-                        </div>
-                        <div id="sentence-output" class="sentence-text" aria-live="polite"></div>
-                    </div>
-
-                    <div class="debug-panel">
-                        <span>FPS: <strong id="debug-fps">0</strong></span>
-                        <span>API Latency: <strong id="debug-latency">0ms</strong></span>
-                        <span>Hands Detected: <strong id="debug-hands">0</strong></span>
-                    </div>
-                </div>
+    <!-- Main Content -->
+    <main class="workspace">
+      <!-- TAB 1: SIGN -> TEXT -->
+      <section
+        id="panel-sign-to-text"
+        class="tab-panel is-active"
+        role="tabpanel"
+        aria-labelledby="tab-btn-sign"
+      >
+        <div class="split-grid">
+          <!-- Left: Camera & Skeleton Overlay -->
+          <div class="panel camera-panel">
+            <div class="panel-header">
+              <div>
+                <div class="eyebrow">OPTICAL INPUT &middot; ON-DEVICE MEDIAPIPE</div>
+                <h2 class="panel-title">Live Hand Capture</h2>
+              </div>
+              <div class="hand-legend" aria-label="Hand color legend">
+                <span class="legend-item"><i class="swatch swatch-left"></i>Left Hand</span>
+                <span class="legend-item"><i class="swatch swatch-right"></i>Right Hand</span>
+              </div>
             </div>
-        </section>
 
-        <!-- TAB 2: TEXT -> SIGN -->
-        <section id="panel-text-to-sign" role="tabpanel" aria-labelledby="tab-text-to-sign" class="tab-panel hidden">
-            <div class="split-view">
-                <div class="input-card card">
-                    <h2>Synthesize Sign Language</h2>
-                    <div class="input-group">
-                        <input type="text" id="sign-text-input" placeholder="Type text to translate into sign..." />
-                        <button id="translate-text-btn" class="btn primary">Translate</button>
-                    </div>
-                    <div class="chips-container" id="word-chips">
-                        <!-- Word matching chips appear here -->
-                    </div>
-                    <div class="video-preview-container" id="reference-video-container">
-                        <h3>Reference Video</h3>
-                        <video id="reference-video" controls muted playsinline class="hidden"></video>
-                        <p id="no-video-msg" class="muted-text">Select a matched word chip to view its reference recording.</p>
-                    </div>
-                </div>
+            <div class="viewport-frame" id="camera-stage">
+              <!-- Subtle Viewfinder Corner Marks -->
+              <span class="reticle reticle-tl" aria-hidden="true"></span>
+              <span class="reticle reticle-tr" aria-hidden="true"></span>
+              <span class="reticle reticle-bl" aria-hidden="true"></span>
+              <span class="reticle reticle-br" aria-hidden="true"></span>
 
-                <div class="renderer-card card">
-                    <div class="renderer-header">
-                        <h2>3D Avatar Player</h2>
-                        <div class="playback-controls">
-                            <button id="play-pause-btn" class="btn sm" disabled>Play</button>
-                            <button id="restart-btn" class="btn sm" disabled>Restart</button>
-                            <label>Speed: <input type="range" id="speed-slider" min="0.25" max="2.0" step="0.25" value="1.0"></label>
-                            <label><input type="checkbox" id="loop-toggle" checked> Loop</label>
-                        </div>
-                    </div>
-                    <div id="canvas-3d-container">
-                        <div id="current-word-sign" class="current-word-overlay">Ready</div>
-                    </div>
+              <video id="webcam-video" autoplay playsinline muted></video>
+              <canvas id="overlay-canvas" aria-hidden="true"></canvas>
+
+              <!-- Camera Permission / State Fallback -->
+              <div id="camera-placeholder" class="viewport-overlay">
+                <div class="placeholder-badge">LOCAL VISION ENGINE</div>
+                <p id="camera-status-msg" class="overlay-msg">
+                  Enable your front camera to track 21-point hand landmarks in real time. Video never leaves your browser.
+                </p>
+                <button id="btn-start-camera" class="btn btn-primary" type="button">Enable Camera</button>
+              </div>
+
+              <!-- Steadiness Ring Indicator -->
+              <div class="capture-hud">
+                <div class="steadiness-pill" title="Hold hand steady for ~15 frames to auto-recognize">
+                  <span class="live-dot" aria-hidden="true"></span>
+                  <span id="steadiness-label">Idle</span>
+                  <div class="steadiness-track">
+                    <div id="steadiness-fill" class="steadiness-fill"></div>
+                  </div>
                 </div>
+                <span id="buffer-counter" class="mono-tag">0 / 32f</span>
+              </div>
             </div>
-        </section>
+
+            <div class="panel-controls">
+              <button id="btn-toggle-camera" class="btn btn-secondary" type="button">Start Camera</button>
+              <button id="btn-capture-sign" class="btn btn-primary" type="button" disabled>
+                Capture Sign <kbd class="kbd">Space</kbd>
+              </button>
+            </div>
+
+            <!-- Telemetry Strip -->
+            <div class="telemetry-bar" aria-label="Performance metrics">
+              <div class="telemetry-item">
+                <span class="telemetry-key">TRACKING RATE</span>
+                <span id="metric-fps" class="telemetry-val">-- FPS</span>
+              </div>
+              <div class="telemetry-item">
+                <span class="telemetry-key">INFERENCE LATENCY</span>
+                <span id="metric-latency" class="telemetry-val">-- ms</span>
+              </div>
+              <div class="telemetry-item">
+                <span class="telemetry-key">RING BUFFER</span>
+                <span id="metric-buffer" class="telemetry-val">0 frames</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Recognition Output & Sentence Builder -->
+          <div class="panel output-panel">
+            <div class="panel-header">
+              <div>
+                <div class="eyebrow">CLASSIFICATION STREAM</div>
+                <h2 class="panel-title">Recognition Output</h2>
+              </div>
+              <span id="recog-status-badge" class="badge badge-neutral">Waiting</span>
+            </div>
+
+            <div class="readout-card" aria-live="polite" aria-atomic="true">
+              <div class="readout-top">
+                <span class="meta-label">DETECTED GLOSS</span>
+                <span class="mono-tag" id="confidence-value">0%</span>
+              </div>
+              <div id="current-sign-label" class="readout-primary">&mdash;</div>
+
+              <div class="confidence-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="confidence-bar-wrap">
+                <div id="confidence-fill" class="confidence-fill"></div>
+              </div>
+            </div>
+
+            <!-- Uncertain Suggestions / Top Alternatives -->
+            <div class="subsection">
+              <div class="subsection-header">
+                <span class="meta-label">CANDIDATE ALTERNATIVES</span>
+                <span class="hint-text">Tap to append</span>
+              </div>
+              <div id="alternatives-list" class="chip-row" aria-live="polite">
+                <span class="empty-hint">Hold a sign steady or press Capture Sign</span>
+              </div>
+            </div>
+
+            <!-- Running Sentence History -->
+            <div class="subsection sentence-section">
+              <div class="subsection-header">
+                <label for="sentence-output" class="meta-label">TRANSCRIPT BUFFER</label>
+                <div class="btn-group">
+                  <button id="btn-undo-word" class="btn btn-sm" type="button" title="Remove last word">Undo</button>
+                  <button id="btn-copy-sentence" class="btn btn-sm" type="button">Copy</button>
+                  <button id="btn-clear-sentence" class="btn btn-sm" type="button">Clear</button>
+                </div>
+              </div>
+              <textarea
+                id="sentence-output"
+                class="sentence-box"
+                rows="4"
+                placeholder="Confident signs append automatically. Uncertain predictions appear above as clickable suggestions…"
+                aria-live="polite"
+              ></textarea>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: TEXT -> SIGN -->
+      <section
+        id="panel-text-to-sign"
+        class="tab-panel"
+        role="tabpanel"
+        aria-labelledby="tab-btn-text"
+        hidden
+      >
+        <div class="split-grid">
+          <!-- Left: Input, Word Chips & Reference Video -->
+          <div class="panel synth-input-panel">
+            <div class="panel-header">
+              <div>
+                <div class="eyebrow">GLOSS SYNTHESIS ENGINE</div>
+                <h2 class="panel-title">Text to ISL Sequence</h2>
+              </div>
+            </div>
+
+            <form id="synthesize-form" class="synth-form">
+              <label for="text-input" class="meta-label">ENGLISH PHRASE</label>
+              <div class="input-row">
+                <input
+                  id="text-input"
+                  class="text-input"
+                  type="text"
+                  placeholder="Type a sentence, e.g. Hello welcome thank you"
+                  autocomplete="off"
+                  required
+                />
+                <button id="btn-translate" class="btn btn-primary" type="submit">Translate</button>
+              </div>
+            </form>
+
+            <!-- Quick Sample Phrases -->
+            <div class="subsection">
+              <div class="subsection-header">
+                <span class="meta-label">SAMPLE PHRASES</span>
+                <span class="hint-text">Quick test</span>
+              </div>
+              <div id="sample-phrases" class="chip-row">
+                <button type="button" class="chip chip-preset" data-phrase="Hello welcome">Hello welcome</button>
+                <button type="button" class="chip chip-preset" data-phrase="Namaste thank you">Namaste thank you</button>
+                <button type="button" class="chip chip-preset" data-phrase="Please help">Please help</button>
+              </div>
+            </div>
+
+            <!-- Matched / Unmatched Word Chips -->
+            <div class="subsection">
+              <div class="subsection-header">
+                <span class="meta-label">GLOSS TIMELINE</span>
+                <span id="sequence-summary" class="mono-tag">0 signs</span>
+              </div>
+              <div id="word-chips" class="chip-row" aria-live="polite">
+                <span class="empty-hint">Matched and unmatched tokens appear here</span>
+              </div>
+            </div>
+
+            <!-- Optional Reference Video Card -->
+            <div id="ref-video-card" class="subsection hidden">
+              <div class="subsection-header">
+                <span class="meta-label">DATASET REFERENCE VIDEO</span>
+                <span id="ref-video-label" class="mono-tag"></span>
+              </div>
+              <div class="ref-video-wrap">
+                <video id="ref-video" controls loop muted playsinline></video>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Three.js 3D Hand Viewport & Playback Engine -->
+          <div class="panel stage-3d-panel">
+            <div class="panel-header">
+              <div>
+                <div class="eyebrow">WEBGL KINEMATICS &middot; 21-JOINT RIG</div>
+                <h2 class="panel-title">3D Pose Articulation</h2>
+              </div>
+              <div class="active-word-badge" aria-live="polite">
+                <span class="meta-label">ACTIVE:</span>
+                <strong id="active-sign-word">&mdash;</strong>
+              </div>
+            </div>
+
+            <div id="three-container" class="viewport-frame viewport-3d" role="img" aria-label="Interactive 3D hand signing animation">
+              <div id="three-empty-state" class="viewport-overlay">
+                <div class="placeholder-badge">3D POSE VIEWPORT</div>
+                <p class="overlay-msg">Translate a phrase to synthesize dual-hand 3D skeletal signing</p>
+              </div>
+            </div>
+
+            <!-- Playback Controls -->
+            <div class="playback-bar">
+              <div class="btn-group">
+                <button id="btn-play-pause" class="btn btn-primary btn-sm" type="button" disabled>Play</button>
+                <button id="btn-restart" class="btn btn-secondary btn-sm" type="button" disabled>Restart</button>
+              </div>
+
+              <label class="slider-control" for="speed-slider">
+                <span class="meta-label">SPEED</span>
+                <input id="speed-slider" type="range" min="0.25" max="2" step="0.25" value="1" />
+                <span id="speed-value" class="mono-tag">1.00x</span>
+              </label>
+
+              <label class="toggle-control" for="loop-toggle">
+                <input id="loop-toggle" type="checkbox" checked />
+                <span class="meta-label">LOOP</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
+  </div>
 
-    <!-- Global Toast Notifications -->
-    <div id="toast-container" class="toast-container"></div>
+  <!-- Global Loading Spinner Overlay -->
+  <div id="global-spinner" class="spinner-pill hidden" role="status" aria-live="polite">
+    <span class="spinner-ring" aria-hidden="true"></span>
+    <span id="spinner-text">Processing…</span>
+  </div>
 
-    <!-- Main Entry Point -->
-    <script type="module" src="js/app.js"></script>
+  <!-- Central Error / Notification Toast -->
+  <div id="toast-container" class="toast-container" role="alert" aria-live="assertive"></div>
+
+  <script type="module" src="./js/app.js"></script>
 </body>
 </html>

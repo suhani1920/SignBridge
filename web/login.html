@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Access Portal — ISL Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-base: #0e1012;
+      --bg-surface: #16181c;
+      --bg-subtle: #1f2228;
+      --ink-primary: #f3f1ec;
+      --ink-muted: #8c8b86;
+      --border-hairline: rgba(243, 241, 236, 0.09);
+      --border-strong: rgba(243, 241, 236, 0.24);
+      --hand-left: #60a5fa;
+      --hand-right: #fb923c;
+      --status-ok: #4ade80;
+      --status-err: #f87171;
+      --accent: #f3f1ec;
+      --accent-ink: #0e1012;
+      --radius-panel: clamp(14px, 1.5vw, 20px);
+      --radius-inner: clamp(10px, 1.1vw, 14px);
+      --radius-pill: 999px;
+      --font-display: "Space Grotesk", -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100dvh;
+      width: 100%;
+      background-color: var(--bg-base);
+      color: var(--ink-primary);
+      font-family: var(--font-sans);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .login-container {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+      width: 100%;
+      min-height: 100dvh;
+      max-width: 1560px;
+      margin: 0 auto;
+      padding: clamp(12px, 2vw, 24px);
+    }
+
+    /* Left Showcase Column */
+    .showcase-side {
+      position: relative;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-panel);
+      padding: clamp(24px, 3vw, 40px);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+    }
+
+    .showcase-side::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 12% 22%, rgba(96, 165, 250, 0.06) 0%, transparent 42%),
+        radial-gradient(circle at 88% 78%, rgba(251, 146, 60, 0.05) 0%, transparent 45%);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .showcase-header {
+      z-index: 2;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-emblem {
+      width: 32px;
+      height: 32px;
+      border-radius: 9px;
+      background: var(--bg-base);
+      border: 1px solid var(--border-strong);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      padding: 5px;
+      gap: 3px;
+    }
+
+    .brand-emblem span:first-child { border-radius: 3px; background: var(--hand-left); }
+    .brand-emblem span:last-child { border-radius: 3px; background: var(--hand-right); }
+
+    .brand-title {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .brand-subtitle {
+      margin: 3px 0 0;
+      font-size: 0.76rem;
+      color: var(--ink-muted);
+      letter-spacing: 0.03em;
+    }
+
+    .hand-illustrator {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      z-index: 2;
+    }
+
+    .hand-wireframe {
+      max-width: 90%;
+      height: auto;
+      opacity: 0.85;
+    }
+
+    .showcase-footer {
+      z-index: 2;
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      color: var(--ink-muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      display: flex;
+      justify-content: space-between;
+      border-top: 1px solid var(--border-hairline);
+      padding-top: 20px;
+    }
+
+    /* Right Auth Panel */
+    .form-side {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(20px, 4vw, 48px);
+    }
+
+    .form-card {
+      width: 100%;
+      max-width: 420px;
+    }
+
+    /* Mode Switcher Tabs (Sign In / Create Account) */
+    .auth-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-pill);
+      padding: 4px;
+      margin-bottom: 24px;
+    }
+
+    .auth-tab {
+      appearance: none;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--ink-muted);
+      font-family: var(--font-display);
+      font-size: 0.84rem;
+      font-weight: 600;
+      padding: 8px 14px;
+      border-radius: var(--radius-pill);
+      cursor: pointer;
+      transition: background-color 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+    }
+
+    .auth-tab:hover:not(.is-active) {
+      color: var(--ink-primary);
+    }
+
+    .auth-tab.is-active {
+      background: var(--bg-subtle);
+      color: var(--ink-primary);
+      border-color: var(--border-hairline);
+    }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      color: var(--ink-muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+
+    .form-title {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: 1.8rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .form-subtitle {
+      margin: 4px 0 24px;
+      font-size: 0.85rem;
+      color: var(--ink-muted);
+    }
+
+    .input-group {
+      margin-bottom: 16px;
+    }
+
+    .input-label {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: 0.67rem;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-muted);
+      margin-bottom: 7px;
+    }
+
+    .input-field {
+      width: 100%;
+      padding: 11px 15px;
+      border-radius: var(--radius-inner);
+      border: 1px solid var(--border-hairline);
+      background: var(--bg-surface);
+      color: var(--ink-primary);
+      font-family: var(--font-sans);
+      font-size: 0.92rem;
+      transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    .input-field:focus {
+      outline: none;
+      border-color: var(--hand-left);
+      box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.14);
+    }
+
+    .form-links {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.78rem;
+      margin: 18px 0 22px;
+      color: var(--ink-muted);
+    }
+
+    .text-link {
+      color: var(--ink-muted);
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+
+    .text-link:hover {
+      color: var(--ink-primary);
+    }
+
+    .btn {
+      appearance: none;
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-pill);
+      padding: 12px 24px;
+      width: 100%;
+      min-height: 44px;
+      font-family: var(--font-sans);
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: transform 0.14s ease, background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--accent-ink);
+      border-color: var(--accent);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1.5px);
+      background: var(--hand-left);
+      border-color: var(--hand-left);
+      color: #ffffff;
+    }
+
+    .btn-primary:active {
+      transform: translateY(0) scale(0.98);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--ink-primary);
+      border-color: var(--border-hairline);
+      margin-top: 10px;
+    }
+
+    .btn-secondary:hover {
+      transform: translateY(-1.5px);
+      background: var(--bg-subtle);
+      border-color: var(--border-strong);
+    }
+
+    .btn-secondary:active {
+      transform: translateY(0) scale(0.98);
+    }
+
+    .alert-panel {
+      padding: 10px 14px;
+      border-radius: var(--radius-inner);
+      background: rgba(248, 113, 113, 0.11);
+      border: 1px solid rgba(248, 113, 113, 0.25);
+      font-size: 0.8rem;
+      color: var(--status-err);
+      margin-bottom: 18px;
+    }
+
+    .alert-panel.is-success {
+      background: rgba(74, 222, 128, 0.12);
+      border-color: rgba(74, 222, 128, 0.28);
+      color: var(--status-ok);
+    }
+
+    @media (max-width: 860px) {
+      .login-container {
+        grid-template-columns: 1fr;
+      }
+      .showcase-side {
+        display: none;
+      }
+      .form-side {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <!-- Left: Showcase Area -->
+    <div class="showcase-side">
+      <div class="showcase-header">
+        <div class="brand">
+          <div class="brand-emblem" aria-hidden="true">
+            <span></span><span></span>
+          </div>
+          <div>
+            <h1 class="brand-title">Sign Bridge</h1>
+            <p class="brand-subtitle">ISL TRANSLATOR</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="hand-illustrator">
+        <svg class="hand-wireframe" viewBox="0 0 1200 648" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <g opacity="0.5" stroke-width="1.5">
+            <path d="M120,400 L250,300 M250,300 L240,200 L220,110 M250,300 L300,180 L290,90 M250,300 L360,200 L360,110 M250,300 L410,240 M250,300 L180,310 M180,310 L150,260 L120,230" stroke="#60A5FA"/>
+            <path d="M1080,400 L950,300 M950,300 L960,200 L980,110 M950,300 L900,180 L910,90 M950,300 L840,200 L840,110 M950,300 L790,240 M950,300 L1020,310 M1020,310 L1050,260 L1080,230" stroke="#FB923C"/>
+          </g>
+          <circle cx="120" cy="400" r="4" fill="#60A5FA"/>
+          <circle cx="250" cy="300" r="5" fill="#60A5FA"/>
+          <circle cx="220" cy="110" r="4" fill="#60A5FA"/>
+          <circle cx="290" cy="90" r="4" fill="#60A5FA"/>
+          <circle cx="360" cy="110" r="4" fill="#60A5FA"/>
+          <circle cx="1080" cy="400" r="4" fill="#FB923C"/>
+          <circle cx="950" cy="300" r="5" fill="#FB923C"/>
+          <circle cx="980" cy="110" r="4" fill="#FB923C"/>
+          <circle cx="910" cy="90" r="4" fill="#FB923C"/>
+          <circle cx="840" cy="110" r="4" fill="#FB923C"/>
+        </svg>
+      </div>
+
+      <div class="showcase-footer">
+       
+      </div>
+    </div>
+
+    <!-- Right: Authentication Form -->
+    <div class="form-side">
+      <div class="form-card">
+        <!-- Switch between Sign In & Create Account -->
+        <div class="auth-tabs" role="tablist" aria-label="Authentication Mode">
+          <button type="button" class="auth-tab is-active" id="tab-signin" role="tab" aria-selected="true">
+            Sign In
+          </button>
+          <button type="button" class="auth-tab" id="tab-signup" role="tab" aria-selected="false">
+            Create Account
+          </button>
+        </div>
+
+        <div class="eyebrow" id="auth-eyebrow"></div>
+        <h2 class="form-title" id="auth-title">Sign In</h2>
+        <p class="form-subtitle" id="auth-subtitle">Enter your registered credentials to open Sign Bridge.</p>
+
+        <!-- Inline Alert Banner -->
+        <div id="auth-alert" class="alert-panel hidden" role="alert"></div>
+
+        <!-- 1. SIGN IN FORM (Already Registered Users) -->
+        <form id="signin-form">
+          <div class="input-group">
+            <label class="input-label" for="signin-email">EMAIL OR USERNAME</label>
+            <input class="input-field" type="text" id="signin-email" placeholder="e.g. name@gmail.com or demo" required autocomplete="username" />
+          </div>
+
+          <div class="input-group">
+            <label class="input-label" for="signin-password">PASSWORD</label>
+            <input class="input-field" type="password" id="signin-password" placeholder="••••••••" required autocomplete="current-password" />
+          </div>
+
+          <div class="form-links">
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+              <input type="checkbox" id="remember-me" style="accent-color: var(--hand-left);" /> Remember me
+            </label>
+            <a href="#" class="text-link" id="btn-forgot">Forgot Password?</a>
+          </div>
+
+          <button class="btn btn-primary" type="submit">Sign In</button>
+        </form>
+
+        <!-- 2. CREATE ACCOUNT FORM (New Users) -->
+        <form id="signup-form" class="hidden">
+          <div class="input-group">
+            <label class="input-label" for="signup-name">FULL NAME</label>
+            <input class="input-field" type="text" id="signup-name" placeholder="e.g. Rahul Kumar" required autocomplete="name" />
+          </div>
+
+          <div class="input-group">
+            <label class="input-label" for="signup-email">EMAIL ADDRESS</label>
+            <input class="input-field" type="email" id="signup-email" placeholder="e.g. name@gmail.com" required autocomplete="email" />
+          </div>
+
+          <div class="input-group">
+            <label class="input-label" for="signup-password">CREATE PASSWORD</label>
+            <input class="input-field" type="password" id="signup-password" placeholder="Minimum 6 characters" minlength="6" required autocomplete="new-password" />
+          </div>
+
+          <div class="input-group">
+            <label class="input-label" for="signup-confirm">CONFIRM PASSWORD</label>
+            <input class="input-field" type="password" id="signup-confirm" placeholder="Re-enter password" minlength="6" required autocomplete="new-password" />
+          </div>
+
+          <button class="btn btn-primary" type="submit" style="margin-top: 8px;">Create Account</button>
+        </form>
+
+        <!-- Quick Demo Bypass -->
+        <button class="btn btn-secondary" type="button" id="btn-demo-bypass">Demo Access (Bypass)</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const STORAGE_KEY = "isl_studio_users";
+
+      const tabSignin = document.getElementById("tab-signin");
+      const tabSignup = document.getElementById("tab-signup");
+      const signinForm = document.getElementById("signin-form");
+      const signupForm = document.getElementById("signup-form");
+
+      const eyebrow = document.getElementById("auth-eyebrow");
+      const title = document.getElementById("auth-title");
+      const subtitle = document.getElementById("auth-subtitle");
+      const alertPanel = document.getElementById("auth-alert");
+      const demoBypass = document.getElementById("btn-demo-bypass");
+
+      const getUsers = () => {
+        try {
+          return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        } catch {
+          return [];
+        }
+      };
+
+      const saveUsers = (users) => {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
+      };
+
+      const showAlert = (message, isSuccess = false) => {
+        alertPanel.textContent = message;
+        alertPanel.classList.toggle("is-success", isSuccess);
+        alertPanel.classList.remove("hidden");
+      };
+
+      const clearAlert = () => {
+        alertPanel.classList.add("hidden");
+        alertPanel.classList.remove("is-success");
+        alertPanel.textContent = "";
+      };
+
+      const authorizeAndEnter = (userName = "User") => {
+        sessionStorage.setItem("isl_authenticated", "true");
+        sessionStorage.setItem("isl_current_user", userName);
+        window.location.href = "./index.html";
+      };
+
+      // Switch to Sign In mode
+      const switchToSignIn = () => {
+        clearAlert();
+        tabSignin.classList.add("is-active");
+        tabSignin.setAttribute("aria-selected", "true");
+        tabSignup.classList.remove("is-active");
+        tabSignup.setAttribute("aria-selected", "false");
+
+        signinForm.classList.remove("hidden");
+        signupForm.classList.add("hidden");
+
+        eyebrow.textContent = "REGISTERED USER";
+        title.textContent = "Sign In";
+        subtitle.textContent = "Enter your registered credentials to open Sign Bridge.";
+      };
+
+      // Switch to Create Account mode
+      const switchToSignUp = () => {
+        clearAlert();
+        tabSignup.classList.add("is-active");
+        tabSignup.setAttribute("aria-selected", "true");
+        tabSignin.classList.remove("is-active");
+        tabSignin.setAttribute("aria-selected", "false");
+
+        signupForm.classList.remove("hidden");
+        signinForm.classList.add("hidden");
+
+        eyebrow.textContent = "NEW USER REGISTRATION";
+        title.textContent = "Create Account";
+        subtitle.textContent = "Register a new account to access the ISL translator workspace.";
+      };
+
+      tabSignin.addEventListener("click", switchToSignIn);
+      tabSignup.addEventListener("click", switchToSignUp);
+
+      // Handle Create Account submission
+      signupForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        clearAlert();
+
+        const name = document.getElementById("signup-name").value.trim();
+        const email = document.getElementById("signup-email").value.trim().toLowerCase();
+        const password = document.getElementById("signup-password").value;
+        const confirm = document.getElementById("signup-confirm").value;
+
+        if (password !== confirm) {
+          showAlert("Passwords do not match. Please re-enter.");
+          return;
+        }
+
+        const users = getUsers();
+        if (users.some((u) => u.email === email)) {
+          showAlert("An account with this email already exists. Please Sign In instead.");
+          return;
+        }
+
+        users.push({ name, email, password });
+        saveUsers(users);
+
+        signupForm.reset();
+        switchToSignIn();
+        document.getElementById("signin-email").value = email;
+        showAlert("Account created successfully! Enter your password to Sign In.", true);
+      });
+
+      // Handle Sign In submission
+      signinForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        clearAlert();
+
+        const identifier = document.getElementById("signin-email").value.trim().toLowerCase();
+        const password = document.getElementById("signin-password").value;
+
+        // Built-in demo account
+        if (identifier === "demo" && password === "demo") {
+          authorizeAndEnter("Demo User");
+          return;
+        }
+
+        const users = getUsers();
+        const matched = users.find(
+          (u) => u.email === identifier && u.password === password
+        );
+
+        if (matched) {
+          authorizeAndEnter(matched.name);
+        } else {
+          showAlert("Invalid email or password. Create an account first or use 'demo' / 'demo'.");
+        }
+      });
+
+      demoBypass.addEventListener("click", () => authorizeAndEnter("Guest"));
+
+      document.getElementById("btn-forgot").addEventListener("click", (e) => {
+        e.preventDefault();
+        showAlert("Create a new account or click Demo Access (Bypass) for local testing.");
+      });
+    });
+  </script>
+</body>
+</html>
