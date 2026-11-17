@@ -46,9 +46,6 @@ RAW_ROOT = pathlib.Path("isl") / "raw_videos"
 OUT_ROOT = pathlib.Path("isl") / "extracted"
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 
 def _is_stale(video_path: pathlib.Path, npz_path: pathlib.Path) -> bool:
@@ -131,13 +128,11 @@ def _process_video(
         print(f"\n  [ERROR] {video_path.name}: {exc}")
         return "error", None
 
-    # Normalise
     raw_seq = sample.pose_seq                           # (T, 21, 3)
     norm_seq = normalize_sequence(raw_seq, align_y=True)
     vec = build_vec(norm_seq)                           # (252,)
     flat_vec = build_flat_vec(norm_seq)                 # (1890,)
 
-    # Save .npz
     npz_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         npz_path,
@@ -160,9 +155,6 @@ def _process_video(
     }
 
 
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
 
 
 def run(
@@ -203,7 +195,6 @@ def run(
         )
         return
 
-    # --- warn about misplaced videos ---
     misplaced = check_video_placement(raw_root)
     if misplaced:
         print("\n[WARNING] The following videos are directly inside raw_videos/")
@@ -217,7 +208,6 @@ def run(
             "  isl/raw_videos/hello_001.mp4          ← WRONG (no label folder)\n"
         )
 
-    # --- collect label folders ---
     label_dirs = sorted(
         d for d in raw_root.iterdir() if d.is_dir() and not d.name.startswith(".")
     )
@@ -256,7 +246,6 @@ def run(
             if meta is not None:
                 upsert_row(meta)
 
-    # --- summary ---
     print(
         f"\n{'='*50}\n"
         f"Done.  Processed: {processed}  |  Cached: {cached}  |  Skipped: {skipped}  |  Errors: {errors}\n"

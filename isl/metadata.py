@@ -28,9 +28,6 @@ METADATA_PATH = pathlib.Path("isl") / "metadata.csv"
 COLUMNS = ["sample_id", "gloss", "meaning", "video_path", "npz_path", "num_frames"]
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 
 def load_metadata(path: pathlib.Path = METADATA_PATH) -> list[dict]:
@@ -75,13 +72,12 @@ def upsert_row(row: dict, path: pathlib.Path = METADATA_PATH) -> None:
         else:
             kept_rows.append(r)
 
-    # Build a clean row with all required columns
     clean = {col: str(row.get(col, "")) for col in COLUMNS}
     if not clean["meaning"].strip() and existing_meaning:
         clean["meaning"] = existing_meaning
     kept_rows.append(clean)
 
-    # Sort by gloss then sample_id for stable output
+    # sort for deterministic output
     kept_rows.sort(key=lambda r: (r.get("gloss", ""), r.get("sample_id", "")))
 
     _write_csv(kept_rows, path)
@@ -96,7 +92,6 @@ def _write_csv(rows: list[dict], path: pathlib.Path) -> None:
             writer = csv.DictWriter(fh, fieldnames=COLUMNS, extrasaction="ignore")
             writer.writeheader()
             writer.writerows(rows)
-        # Atomic replace
         os.replace(tmp, path)
     except Exception:
         try:
