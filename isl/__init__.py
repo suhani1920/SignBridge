@@ -1,4 +1,6 @@
-"""Public API for the ISL recognition engine."""
+"""
+isl/__init__.py — Public API for the SignBridge ISL package (P1 pipeline + P2 recognition engine).
+"""
 
 from isl.adapter import RecognitionService
 from isl.matcher import (

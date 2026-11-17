@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any, Literal
 import json
 import numpy as np
-import yaml
 
 # ===========================================================================
 # 1. P2 Recognition Engine Contract Constants & Types
@@ -16,7 +15,7 @@ import yaml
 SEQ_LEN: int = 32
 NUM_LANDMARKS: int = 21
 COORDS: int = 3
-NUM_HANDS: int = 2  # [0: left, 1: right]
+NUM_HANDS: int = 2  # [0: left / primary single-hand MVP slot, 1: right]
 
 # Summary vector layout: mean, std, min, max, velocity across flattened hand coords
 # Per frame flattened dim = 2 * 21 * 3 = 126 -> 5 stats * 126 = 630
@@ -87,6 +86,8 @@ class RecognizerConfig:
         file_path = Path(path)
         raw_text = file_path.read_text(encoding="utf-8")
         if file_path.suffix.lower() in {".yaml", ".yml"}:
+            import yaml
+
             data: dict[str, Any] = yaml.safe_load(raw_text) or {}
         elif file_path.suffix.lower() == ".json":
             data = json.loads(raw_text)
@@ -101,17 +102,41 @@ class RecognizerConfig:
 # 2. P1 Video-to-Pose Pipeline Contract Constants & Types
 # ===========================================================================
 
+#: Each landmark has x, y, z coordinates.
 NUM_COORDS: int = 3
+
+#: Pipeline resamples every clip to this many frames before flattening.
 RESAMPLE_FRAMES: int = 30
+
+#: Minimum number of frames with a detected hand for a clip to be accepted.
 MIN_HAND_FRAMES: int = 5
+
+#: Supported raw-video file extensions (lowercase, with leading dot).
 VIDEO_EXTENSIONS: tuple[str, ...] = (".mp4", ".mov", ".avi", ".webm")
+
+#: Global feature vector length: mean+std+min+max per channel.
 VEC_LEN: int = NUM_LANDMARKS * NUM_COORDS * 4           # 252
+
+#: Flattened sequence vector length: RESAMPLE_FRAMES × landmarks × coords.
 FLAT_VEC_LEN: int = RESAMPLE_FRAMES * NUM_LANDMARKS * NUM_COORDS  # 1890
 
 
 @dataclass
 class PoseFrame:
-    """Landmark data for a single video frame (one hand)."""
+    """Landmark data for a single video frame (one hand).
+
+    Attributes
+    ----------
+    frame_idx:
+        Zero-based index of the frame within the source video.
+    landmarks:
+        Raw (un-normalised) landmark array from MediaPipe Hands,
+        shape ``(21, 3)`` in image-normalised coordinates
+        (x and y in [0, 1], z relative to wrist depth).
+    detected:
+        ``True`` if MediaPipe reported a hand in this frame; ``False``
+        means the entry contains zeros (interpolated or placeholder).
+    """
 
     frame_idx: int
     landmarks: np.ndarray          # shape (NUM_LANDMARKS, NUM_COORDS) float32
@@ -128,13 +153,31 @@ class PoseFrame:
 
 @dataclass
 class SignSample:
-    """All data associated with one sign-language video clip."""
+    """All data associated with one sign-language video clip.
+
+    Attributes
+    ----------
+    sample_id:
+        Video filename without its extension, e.g. ``"hello_001"``.
+    gloss:
+        Sign label (the name of the label folder), e.g. ``"hello"``.
+    video_path:
+        Absolute or repo-relative path to the source ``.mp4`` file.
+    source_fps:
+        Frame-rate of the source video (frames per second).
+    frames:
+        List of ``PoseFrame`` objects, one per video frame.
+    """
 
     sample_id: str
     gloss: str
     video_path: str
     source_fps: float
     frames: list[PoseFrame] = field(default_factory=list)
+
+    # ------------------------------------------------------------------
+    # Convenience properties
+    # ------------------------------------------------------------------
 
     @property
     def total_frames(self) -> int:
@@ -148,7 +191,10 @@ class SignSample:
 
     @property
     def pose_seq(self) -> np.ndarray:
-        """Return the full landmark sequence as ``(T, 21, 3)`` float32."""
+        """Return the full landmark sequence as ``(T, 21, 3)`` float32.
+
+        Only frames where a hand was detected are included (detected=True).
+        """
         arrays = [f.landmarks for f in self.frames if f.detected]
         if not arrays:
             return np.zeros((0, NUM_LANDMARKS, NUM_COORDS), dtype=np.float32)
